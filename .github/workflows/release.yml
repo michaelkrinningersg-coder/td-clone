@@ -1,0 +1,106 @@
+name: Tag and deploy
+
+# Push to main -> new patch tag -> static export of that tag -> GitHub Pages.
+#
+# Tagging and deploying live in one workflow on purpose. Splitting them would
+# not work: GitHub deliberately does not start a workflow from an event caused
+# by the default GITHUB_TOKEN, so a tag pushed by a tag-only workflow would
+# never trigger a separate deploy workflow.
+on:
+  push:
+    branches: [main]
+
+# Never let two releases interleave; let a running one finish rather than
+# leaving a tag pushed with nothing deployed.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.next }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needs full history so existing tags are visible
+
+      - name: Determine next version
+        id: version
+        run: |
+          set -euo pipefail
+          latest="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n1)"
+          if [ -z "$latest" ]; then
+            next="v0.1.0"
+          else
+            version="${latest#v}"
+            major="${version%%.*}"
+            rest="${version#*.}"
+            minor="${rest%%.*}"
+            patch="${rest#*.}"
+            next="v${major}.${minor}.$((patch + 1))"
+          fi
+          echo "Latest tag: ${latest:-none} -> new tag: $next"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        env:
+          NEXT_TAG: ${{ steps.version.outputs.next }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$NEXT_TAG" -m "Release $NEXT_TAG"
+          git push origin "$NEXT_TAG"
+
+  build:
+    needs: tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag.outputs.tag }} # build exactly what was tagged
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - run: npm ci
+
+      # The Prisma client is gitignored, and the API routes are typechecked even
+      # though the static build excludes them, so it has to exist here.
+      - run: npx prisma generate
+
+      - name: Build static export
+        env:
+          NEXT_PUBLIC_STATIC_EXPORT: '1'
+          # e.g. /td-clone for a project site, empty for a user/custom-domain site
+          NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

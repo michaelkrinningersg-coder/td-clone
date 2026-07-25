@@ -62,8 +62,16 @@ Pikes Peak — plus vier reine Sprintstrecken.
 
 ## Deployment
 
-- `.github/workflows/tag.yml` — jeder Push auf `main` erzeugt einen neuen Patch-Tag.
-- `.github/workflows/deploy-pages.yml` — jeder Tag `v*.*.*` baut den statischen Export
-  und deployt ihn auf GitHub Pages.
+`.github/workflows/release.yml` — Push auf `main` → neuer Patch-Tag → statischer Export
+genau dieses Tags → GitHub Pages.
 
-Einmalig nötig: **Settings → Pages → Source: GitHub Actions**.
+Tag und Deploy stecken bewusst in **einem** Workflow: GitHub startet grundsätzlich keinen
+Workflow aus einem Event, das vom Standard-`GITHUB_TOKEN` ausgelöst wurde. Ein Tag aus
+einem separaten Tag-Workflow würde einen eigenständigen Deploy-Workflow also nie
+auslösen — die Kette bliebe stillschweigend stehen.
+
+Einmalig nötig:
+
+- **Settings → Pages → Source: GitHub Actions**
+- **Settings → Actions → General → Workflow permissions: Read and write** (sonst darf
+  der Workflow keinen Tag pushen)
