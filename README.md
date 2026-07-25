@@ -56,9 +56,24 @@ damit die App ohne API-Zugriff lauffähig ist.
   und Antriebsart (AWD leicht im Vorteil, FWD leicht im Nachteil).
 - **Steigung**: reine Physik (`g · sin θ`), gewichtsunabhängig.
 
-Strecken sind Segmentfolgen (Gerade / Kurve mit Radius, jeweils optional mit Steigung)
+Strecken sind Segmentfolgen (Gerade / Kurve mit Radius, Richtung und optionaler Steigung)
 in `src/data/tracks.ts`, angelehnt an die realen Eckdaten von Monza, Spa, Monaco und
 Pikes Peak — plus vier reine Sprintstrecken.
+
+Die Kurvenrichtung ist reine Zeichen-Information und geht **nicht** in die Zeit ein — sie
+sorgt dafür, dass jede Strecke ihre eigene wiedererkennbare Form bekommt statt eines
+generischen Zickzacks. Da die Segmentdaten Näherungen sind, ist die gezeichnete Linie
+eine stilisierte Ähnlichkeit und schließt sich nicht exakt zur Runde.
+
+## Tests
+
+```bash
+npm test
+```
+
+Deckt die Kalibrierung der Beschleunigungskurve (trifft die reale 0-100-Zeit, überschreitet
+nie den Top-Speed), das Kurven- und Steigungsverhalten sowie den CarQuery-Importfilter ab —
+insbesondere, dass ein Auto mit fehlendem Wert wirklich verworfen und nicht geschätzt wird.
 
 ## Deployment
 

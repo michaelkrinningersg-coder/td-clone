@@ -14,17 +14,20 @@ export interface TrackPath {
   maxY: number;
 }
 
-/** Builds a stylized 2D top-down path from a segment list. Corner turn direction
- * isn't stored per segment (we only know radius/length), so corners alternate
- * left/right, which is enough to draw a plausible, readable circuit shape - this
- * is a stylization for the visualization, not a claim of exact real geometry. */
+/** Builds a 2D top-down path by walking the segments: a straight keeps the
+ * current heading, a corner sweeps it by lengthM/radiusM in the corner's own
+ * direction. Since corner directions come from the real circuits, each layout
+ * comes out with its own recognizable shape.
+ *
+ * The segment data approximates the real circuits, so the resulting outline is
+ * a stylized likeness rather than exact geometry - and a lap generally will not
+ * close back onto its start point. */
 export function buildTrackPath(segments: Segment[], stepM = 5): TrackPath {
   const points: PathPoint[] = [{ distanceM: 0, x: 0, y: 0 }];
   let x = 0;
   let y = 0;
   let heading = 0;
   let distanceSoFar = 0;
-  let turnSign = 1;
   let minX = 0,
     maxX = 0,
     minY = 0,
@@ -33,7 +36,10 @@ export function buildTrackPath(segments: Segment[], stepM = 5): TrackPath {
   for (const seg of segments) {
     const steps = Math.max(1, Math.round(seg.lengthM / stepM));
     const stepLen = seg.lengthM / steps;
-    const stepAngle = seg.kind === "corner" ? ((seg.lengthM / seg.radiusM) / steps) * turnSign : 0;
+    const stepAngle =
+      seg.kind === "corner"
+        ? ((seg.lengthM / seg.radiusM) / steps) * (seg.dir === "left" ? -1 : 1)
+        : 0;
 
     for (let i = 0; i < steps; i++) {
       heading += stepAngle / 2;
@@ -47,7 +53,6 @@ export function buildTrackPath(segments: Segment[], stepM = 5): TrackPath {
       if (y < minY) minY = y;
       if (y > maxY) maxY = y;
     }
-    if (seg.kind === "corner") turnSign *= -1;
   }
 
   return { points, minX, maxX, minY, maxY };
