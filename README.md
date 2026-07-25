@@ -37,14 +37,20 @@ npx serve out
 
 ## Autodaten
 
-`npm run import:cars` holt Fahrzeuge von der [CarQuery API](https://www.carqueryapi.com/)
+`npm run import:cars` lädt den von autoevolution abgeleiteten Spec-Datensatz
+[ilyasozkurt/automobile-models-and-specs](https://github.com/ilyasozkurt/automobile-models-and-specs)
 und übernimmt **nur** Autos, bei denen alle benötigten Werte vorhanden sind — Top-Speed,
 0–100 km/h, Leistung, Gewicht, Drehmoment, Antriebsart und Kraftstoffart. Fehlt einer
 davon, fliegt das Auto raus statt geschätzt zu werden. Ergebnis landet in
-`src/data/cars.json`.
+`src/data/cars.json` und ist eingecheckt, der Import muss also nicht laufen, um die App
+zu starten.
 
-`src/data/cars.json` enthält aktuell einen kleinen, handgepflegten Platzhalter-Satz,
-damit die App ohne API-Zugriff lauffähig ist.
+Aus 30.066 Motorvarianten bleiben so 5.100 Autos: pro Modell und Baujahr die stärkste
+Variante, entdoppelt über die Auto-ID, plus ein Plausibilitätsfilter gegen offensichtlich
+kaputte Quellzeilen. `MAX_CARS=600 npm run import:cars` begrenzt die Menge.
+
+Der Datensatz führt keine Lizenzdatei und ist von autoevolution.com gescrapt — für einen
+anderen Einsatzzweck wäre das vorab zu klären.
 
 ## Physik
 

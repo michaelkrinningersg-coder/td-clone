@@ -1,19 +1,30 @@
 import type { Drivetrain } from "@/lib/physics";
+import { carSlug } from "@/lib/slug";
 
-/** Shape of a single trim as returned by the CarQuery API (`cmd=getTrims`).
- * Every field is optional because the API omits or blanks out values it does
- * not have for a given model. */
-export interface RawTrim {
-  model_make_display?: string;
-  model_name?: string;
-  model_year?: string;
-  model_top_speed_kph?: string;
-  model_0_to_100_kph?: string;
-  model_engine_power_ps?: string;
-  model_weight_kg?: string;
-  model_engine_torque_nm?: string;
-  model_drive?: string;
-  model_engine_fuel?: string;
+/** Parsing for the autoevolution-derived spec dump published at
+ * https://github.com/ilyasozkurt/automobile-models-and-specs
+ *
+ * Its values are human-readable strings carrying several units at once, e.g.
+ * "155 Mph (249 Km/H)" or "257.4 Kw @ 6500 Rpm / 350 Hp @ 6500 Rpm". The
+ * functions below pull out the metric figure we need, and return null whenever
+ * a value is missing or unparseable so the car can be dropped rather than
+ * guessed at. */
+
+export interface RawEngine {
+  automobile_id?: string | number;
+  name?: string;
+  specs?: Record<string, Record<string, string>>;
+}
+
+export interface RawAutomobile {
+  id?: string | number;
+  brand_id?: string | number;
+  name?: string;
+}
+
+export interface RawBrand {
+  id?: string | number;
+  name?: string;
 }
 
 export interface ImportedCar {
@@ -29,75 +40,243 @@ export interface ImportedCar {
   fuelType: string;
 }
 
-export function mapDrivetrain(raw: string | undefined): Drivetrain | null {
-  const v = (raw ?? "").trim().toLowerCase();
-  if (!v) return null;
-  if (v.includes("all") || v.includes("4wd") || v.includes("awd") || v.includes("4x4")) return "AWD";
-  if (v.includes("front")) return "FWD";
-  if (v.includes("rear")) return "RWD";
-  if (v === "fwd") return "FWD";
-  if (v === "rwd") return "RWD";
+export const SPEC_FIELDS = {
+  power: ["Engine Specs", "Power:"],
+  torque: ["Engine Specs", "Torque:"],
+  fuel: ["Engine Specs", "Fuel:"],
+  weight: ["Weight Specs", "Unladen Weight:"],
+  accel: ["Performance Specs", "Acceleration 0-62 Mph (0-100 Kph):"],
+  topSpeed: ["Performance Specs", "Top Speed:"],
+  drive: ["Transmission Specs", "Drive Type:"],
+} as const;
+
+function spec(engine: RawEngine, [group, key]: readonly [string, string]): string | undefined {
+  return engine.specs?.[group]?.[key];
+}
+
+/** Power is listed as kW, Hp and Bhp on separate lines. We want Hp, which on
+ * autoevolution is metric horsepower (PS) - matching per line keeps "345 Bhp"
+ * from being read as an Hp figure. */
+export function parsePowerPs(raw: string | undefined): number | null {
+  if (!raw) return null;
+  for (const line of raw.split(/[\r\n]+/)) {
+    const m = line.match(/^\s*(\d+(?:[.,]\d+)?)\s*hp\b/i);
+    if (m) return toNumber(m[1]);
+  }
   return null;
 }
 
-/** CarQuery returns numbers as strings and uses "", "-" or "n/a" for unknowns. */
-export function toPositiveFloat(raw: string | undefined): number | null {
-  if (raw === undefined || raw === null) return null;
-  const trimmed = String(raw).trim();
-  if (!trimmed) return null;
-  const n = Number.parseFloat(trimmed);
+/** Torque is listed as Lb-Ft and Nm on separate lines. */
+export function parseTorqueNm(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const m = raw.match(/(\d+(?:[.,]\d+)?)\s*nm\b/i);
+  return m ? toNumber(m[1]) : null;
+}
+
+/** "3560 Lbs (1615 Kg)", occasionally metric-only. */
+export function parseWeightKg(raw: string | undefined): number | null {
+  return parseMetric(raw, /\(\s*(\d+(?:[.,]\d+)?)\s*kg\s*\)/i, /(\d+(?:[.,]\d+)?)\s*kg\b/i);
+}
+
+/** "155 Mph (249 Km/H)", occasionally metric-only. */
+export function parseTopSpeedKph(raw: string | undefined): number | null {
+  return parseMetric(raw, /\(\s*(\d+(?:[.,]\d+)?)\s*km\/h\s*\)/i, /(\d+(?:[.,]\d+)?)\s*km\/h\b/i);
+}
+
+/** "5.6 S" */
+export function parseSeconds(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const m = raw.match(/(\d+(?:[.,]\d+)?)\s*s\b/i);
+  return m ? toNumber(m[1]) : null;
+}
+
+export function parseDrivetrain(raw: string | undefined): Drivetrain | null {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (!v || v === "none") return null;
+  if (v.startsWith("front")) return "FWD";
+  if (v.startsWith("rear")) return "RWD";
+  if (v.startsWith("all") || v.startsWith("four") || v.includes("4x4")) return "AWD";
+  return null;
+}
+
+function parseMetric(raw: string | undefined, preferred: RegExp, fallback: RegExp): number | null {
+  if (!raw) return null;
+  const m = raw.match(preferred) ?? raw.match(fallback);
+  return m ? toNumber(m[1]) : null;
+}
+
+function toNumber(raw: string): number | null {
+  const n = Number.parseFloat(raw.replace(",", "."));
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/** Converts one API trim into a car, or returns null if ANY required value is
- * missing. Dropping the car is deliberate: the whole point is that every car in
- * the game has the same real, measured stats rather than estimated stand-ins. */
-export function convertTrim(trim: RawTrim): ImportedCar | null {
-  const make = trim.model_make_display?.trim();
-  const model = trim.model_name?.trim();
-  const year = trim.model_year ? Number.parseInt(trim.model_year, 10) : Number.NaN;
-  const topSpeedKph = toPositiveFloat(trim.model_top_speed_kph);
-  const accel0to100s = toPositiveFloat(trim.model_0_to_100_kph);
-  const powerPs = toPositiveFloat(trim.model_engine_power_ps);
-  const weightKg = toPositiveFloat(trim.model_weight_kg);
-  const torqueNm = toPositiveFloat(trim.model_engine_torque_nm);
-  const drivetrain = mapDrivetrain(trim.model_drive);
-  const fuelType = trim.model_engine_fuel?.trim();
+/** Names that plain titlecasing gets wrong. */
+const MAKE_ALIASES: Record<string, string> = {
+  MCLAREN: "McLaren",
+  "MERCEDES BENZ": "Mercedes-Benz",
+  SSANGYONG: "SsangYong",
+};
+
+/** Brand words that are acronyms or stylized capitals, not shouting. */
+const MAKE_KEEP_UPPERCASE = new Set([
+  "AC",
+  "AMG",
+  "BMW",
+  "DR",
+  "DS",
+  "FSO",
+  "GMC",
+  "GTA",
+  "KTM",
+  "MG",
+  "MINI",
+  "RAM",
+  "SEAT",
+  "TVR",
+]);
+
+/** The source mixes shouted names ("MERCEDES BENZ") with already-correct ones
+ * ("DeLorean", "Mercedes-AMG", "Polestar"), so only all-caps names get
+ * titlecased - anything already carrying lowercase letters is left alone. */
+export function normalizeMake(raw: string | undefined): string | null {
+  const name = raw?.trim().replace(/\s+/g, " ");
+  if (!name) return null;
+
+  const alias = MAKE_ALIASES[name.toUpperCase()];
+  if (alias) return alias;
+
+  if (name !== name.toUpperCase()) return name; // already mixed case
+
+  return name
+    .split(" ")
+    .map((word) =>
+      word
+        .split("-") // "ROLLS-ROYCE" is two words to titlecase, not one
+        .map((part) => (MAKE_KEEP_UPPERCASE.has(part) ? part : part[0] + part.slice(1).toLowerCase()))
+        .join("-"),
+    )
+    .join(" ");
+}
+
+/** Model entries look like "VOLKSWAGEN Golf VII 5 Doors 2012-2017 Photos,
+ * engines &amp; full specs" - occasionally with the year leading instead
+ * ("2015 Lotus Evora 400") and sometimes with no year at all. */
+export function parseModelAndYear(
+  rawName: string | undefined,
+  make: string,
+): { model: string; year: number } | null {
+  if (!rawName) return null;
+
+  let text = rawName
+    .replace(/&amp;?/gi, "&")
+    .replace(/\bPhotos,?\s*engines\s*&?\s*full specs\b/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Drop the brand wherever it appears, so "2015 Lotus Evora 400" also works.
+  // Hyphens and spaces are interchangeable here: the normalized make may read
+  // "Mercedes-Benz" while the model name spells it "MERCEDES BENZ", and without
+  // this the brand would survive into the model ("Mercedes-Benz MERCEDES BENZ 300 SL").
+  const makeWords = make.split(/[\s-]+/).map(escapeRegExp).join("[\\s-]+");
+  text = text.replace(new RegExp(`\\b${makeWords}\\b`, "i"), " ").replace(/\s+/g, " ").trim();
+
+  // Model years are 4-digit, optionally a range ("2012-2017" / "2012 - present").
+  const yearMatch = text.match(/\b(1[89]\d{2}|20\d{2})\b(\s*[-–]\s*(1[89]\d{2}|20\d{2}|present))?/i);
+  if (!yearMatch) return null;
+  const year = Number.parseInt(yearMatch[1], 10);
+
+  const model = text.replace(yearMatch[0], " ").replace(/\s+/g, " ").replace(/^[-–,\s]+|[-–,\s]+$/g, "");
+  if (!model) return null;
+
+  return { model, year };
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Builds a car from one engine variant, or returns null if ANY required value
+ * is missing. Dropping the car is deliberate: every car in the game must carry
+ * the same real, measured stats rather than estimated stand-ins. */
+export function convertEngine(
+  engine: RawEngine,
+  automobile: RawAutomobile | undefined,
+  brand: RawBrand | undefined,
+): ImportedCar | null {
+  const make = normalizeMake(brand?.name);
+  if (!make) return null;
+
+  const modelYear = parseModelAndYear(automobile?.name, make);
+  if (!modelYear) return null;
+
+  const powerPs = parsePowerPs(spec(engine, SPEC_FIELDS.power));
+  const torqueNm = parseTorqueNm(spec(engine, SPEC_FIELDS.torque));
+  const weightKg = parseWeightKg(spec(engine, SPEC_FIELDS.weight));
+  const accel0to100s = parseSeconds(spec(engine, SPEC_FIELDS.accel));
+  const topSpeedKph = parseTopSpeedKph(spec(engine, SPEC_FIELDS.topSpeed));
+  const drivetrain = parseDrivetrain(spec(engine, SPEC_FIELDS.drive));
+  // Fuel is free text, so require actual letters rather than a "-" placeholder.
+  const rawFuel = spec(engine, SPEC_FIELDS.fuel)?.trim();
+  const fuelType = rawFuel && /[a-z]/i.test(rawFuel) ? rawFuel : undefined;
 
   if (
-    !make ||
-    !model ||
-    !Number.isFinite(year) ||
-    topSpeedKph === null ||
-    accel0to100s === null ||
     powerPs === null ||
-    weightKg === null ||
     torqueNm === null ||
+    weightKg === null ||
+    accel0to100s === null ||
+    topSpeedKph === null ||
     !drivetrain ||
     !fuelType
   ) {
     return null;
   }
 
-  return { make, model, year, topSpeedKph, accel0to100s, powerPs, weightKg, torqueNm, drivetrain, fuelType };
+  return {
+    make,
+    model: modelYear.model,
+    year: modelYear.year,
+    topSpeedKph,
+    accel0to100s,
+    powerPs,
+    weightKg,
+    torqueNm,
+    drivetrain,
+    fuelType,
+  };
 }
 
-/** CarQuery sometimes wraps its payload in a JSONP callback even when none was
- * requested, which would otherwise make JSON.parse throw. The callback name can
- * be a bare "?" - that is the placeholder CarQuery's own docs use. */
-export function stripJsonpWrapper(text: string): string {
-  const match = text.match(/^\s*[\w.$?]+\(([\s\S]*)\);?\s*$/);
-  return match ? match[1] : text;
-}
-
-/** Keeps the highest-power trim per make+model+year, so one model does not
- * flood the game with a dozen near-identical entries. */
-export function pickRepresentativeTrims(cars: ImportedCar[]): ImportedCar[] {
+/** Keeps the most powerful variant per car, so a single model does not fill the
+ * game with a dozen near-identical entries.
+ *
+ * Deduplication is keyed on the car's slug rather than make/model/year, because
+ * the slug is what the app uses as the car's id. Names that differ only in
+ * punctuation ("Ibiza 5 doors" vs "Ibiza 5-doors") produce the same slug, and
+ * letting both through would mean two cars sharing one id. */
+export function pickRepresentativeVariants(cars: ImportedCar[]): ImportedCar[] {
   const best = new Map<string, ImportedCar>();
   for (const car of cars) {
-    const key = `${car.make}|${car.model}|${car.year}`;
+    const key = carSlug(car);
     const existing = best.get(key);
     if (!existing || car.powerPs > existing.powerPs) best.set(key, car);
   }
   return Array.from(best.values());
+}
+
+/** Guards against obviously broken source rows (a 5000 kg "sports car", a
+ * 0.1 s 0-100). These are data errors, not interesting outliers. */
+export function isPlausible(car: ImportedCar): boolean {
+  return (
+    car.topSpeedKph >= 40 &&
+    car.topSpeedKph <= 500 &&
+    car.accel0to100s >= 1 &&
+    car.accel0to100s <= 60 &&
+    car.powerPs >= 10 &&
+    car.powerPs <= 2000 &&
+    car.weightKg >= 300 &&
+    car.weightKg <= 4000 &&
+    car.torqueNm >= 20 &&
+    car.torqueNm <= 2500 &&
+    car.year >= 1900 &&
+    car.year <= 2030
+  );
 }

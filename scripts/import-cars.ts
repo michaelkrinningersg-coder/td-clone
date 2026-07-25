@@ -1,95 +1,73 @@
 /**
- * Imports real car data from the CarQuery API (https://www.carqueryapi.com/) and
- * keeps ONLY cars that have every field our physics engine and UI need. Anything
- * missing a required stat is dropped rather than filled in with a guess.
+ * Imports car specs from the autoevolution-derived dump published at
+ * https://github.com/ilyasozkurt/automobile-models-and-specs and keeps ONLY
+ * cars that have every field the physics engine and UI need. Anything missing
+ * a required stat is dropped rather than filled in with a guess.
  *
  *   npm run import:cars
  *
- * Writes the result to src/data/cars.json, which the app reads directly and
- * `npm run db:seed` loads into SQLite.
- *
- * The filtering logic lives in src/lib/car-import.ts and is covered by
- * src/lib/car-import.test.ts; this file is just the network plumbing.
+ * Writes src/data/cars.json, which the app reads directly and `npm run db:seed`
+ * loads into SQLite. The parsing lives in src/lib/car-import.ts and is covered
+ * by src/lib/car-import.test.ts; this file is just download and assembly.
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { unzipSync, strFromU8 } from "fflate";
 import {
-  convertTrim,
-  pickRepresentativeTrims,
-  stripJsonpWrapper,
+  convertEngine,
+  isPlausible,
+  pickRepresentativeVariants,
   type ImportedCar,
-  type RawTrim,
+  type RawAutomobile,
+  type RawBrand,
+  type RawEngine,
 } from "../src/lib/car-import";
 
-const API_BASE = "https://www.carqueryapi.com/api/0.3/";
+const SOURCE_URL =
+  "https://raw.githubusercontent.com/ilyasozkurt/automobile-models-and-specs/master/automobiles.json.zip";
 
-// Curated spread of makes so the resulting dataset covers a wide range of
-// performance characteristics (economy cars through hypercars, plus EVs) -
-// edit this list to add or remove manufacturers.
-const MAKES = [
-  "toyota",
-  "honda",
-  "volkswagen",
-  "ford",
-  "chevrolet",
-  "bmw",
-  "mercedes-benz",
-  "audi",
-  "porsche",
-  "nissan",
-  "dodge",
-  "ferrari",
-  "lamborghini",
-  "mclaren",
-  "bugatti",
-  "koenigsegg",
-  "tesla",
-];
-
-const REQUEST_DELAY_MS = 300; // be a courteous, unauthenticated free-API citizen
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function fetchJson<T>(params: Record<string, string>): Promise<T> {
-  const url = new URL(API_BASE);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`CarQuery request failed: ${res.status} ${url}`);
-  return JSON.parse(stripJsonpWrapper(await res.text())) as T;
-}
+/** Optional cap on how many cars end up in the game, highest-power first.
+ * Unset by default: the game ships the whole deduplicated field, and the car
+ * picker filters it client-side. Set MAX_CARS to trim the payload. */
+const MAX_CARS = process.env.MAX_CARS ? Number(process.env.MAX_CARS) : Infinity;
 
 async function main() {
-  const kept: ImportedCar[] = [];
-  let seen = 0;
+  console.log(`Downloading ${SOURCE_URL} ...`);
+  const res = await fetch(SOURCE_URL);
+  if (!res.ok) throw new Error(`Download failed: ${res.status} ${res.statusText}`);
+  const zip = unzipSync(new Uint8Array(await res.arrayBuffer()));
 
-  for (const make of MAKES) {
-    console.log(`Fetching models for ${make}...`);
-    const modelsRes = await fetchJson<{ Models: { model_name: string }[] }>({
-      cmd: "getModels",
-      make,
-    });
-    await sleep(REQUEST_DELAY_MS);
+  const read = <T>(name: string): T[] => {
+    const file = zip[name];
+    if (!file) throw new Error(`${name} missing from archive`);
+    return JSON.parse(strFromU8(file)) as T[];
+  };
 
-    for (const m of modelsRes.Models ?? []) {
-      const trimsRes = await fetchJson<{ Trims: RawTrim[] }>({
-        cmd: "getTrims",
-        make,
-        model: m.model_name,
-        full_results: "1",
-      });
-      await sleep(REQUEST_DELAY_MS);
+  const engines = read<RawEngine>("engines.json");
+  const automobiles = read<RawAutomobile>("automobiles.json");
+  const brands = read<RawBrand>("brands.json");
+  console.log(`Read ${engines.length} engine variants, ${automobiles.length} models, ${brands.length} brands.`);
 
-      for (const trim of trimsRes.Trims ?? []) {
-        seen++;
-        const car = convertTrim(trim);
-        if (car) kept.push(car);
-      }
+  const automobileById = new Map(automobiles.map((a) => [String(a.id), a]));
+  const brandById = new Map(brands.map((b) => [String(b.id), b]));
+
+  const complete: ImportedCar[] = [];
+  let implausible = 0;
+  for (const engine of engines) {
+    const automobile = automobileById.get(String(engine.automobile_id));
+    const brand = brandById.get(String(automobile?.brand_id));
+    const car = convertEngine(engine, automobile, brand);
+    if (!car) continue;
+    if (!isPlausible(car)) {
+      implausible++;
+      continue;
     }
+    complete.push(car);
   }
 
-  const cars = pickRepresentativeTrims(kept).sort(
+  const representative = pickRepresentativeVariants(complete);
+  const selected = [...representative].sort((a, b) => b.powerPs - a.powerPs).slice(0, MAX_CARS);
+  const cars = selected.sort(
     (a, b) => a.make.localeCompare(b.make) || a.model.localeCompare(b.model) || a.year - b.year,
   );
 
@@ -97,7 +75,12 @@ async function main() {
   writeFileSync(outPath, `${JSON.stringify(cars, null, 2)}\n`);
 
   console.log(
-    `Considered ${seen} trims, ${kept.length} had complete data, kept ${cars.length} after picking one trim per model/year.`,
+    [
+      `${engines.length} variants considered`,
+      `${complete.length} had complete, plausible data (${implausible} dropped as implausible)`,
+      `${representative.length} after one variant per model/year`,
+      `${cars.length} written${Number.isFinite(MAX_CARS) ? ` (MAX_CARS=${MAX_CARS})` : ""}`,
+    ].join("\n  -> "),
   );
   console.log(`Written to ${outPath}`);
 }

@@ -1,23 +1,33 @@
 import Link from "next/link";
-import type { CarData } from "@/lib/data";
+import type { CarData, StatRange, StatRanges } from "@/lib/data";
 
 interface StatBarProps {
   label: string;
   value: number;
-  max: number;
+  range: StatRange;
   unit: string;
-  invert?: boolean; // for stats where lower is "better" (e.g. 0-100 time)
+  /** True for stats where a lower number is the better one (0-100 time, weight). */
+  lowerIsBetter?: boolean;
 }
 
-function StatBar({ label, value, max, unit, invert }: StatBarProps) {
-  const ratio = max > 0 ? value / max : 0;
-  const widthPercent = Math.max(4, Math.min(100, ratio * 100));
-  const colorClass = invert ? "bg-amber-500" : "bg-emerald-500";
+/** A full bar always means "strong for this stat", whichever direction the
+ * underlying number runs - otherwise a 2.9s sprint would render as an almost
+ * empty bar and read as bad. Scaled between the field's weakest and strongest
+ * car so ordinary cars still show a meaningful difference. */
+function StatBar({ label, value, range, unit, lowerIsBetter }: StatBarProps) {
+  const span = range.max - range.min;
+  const position = span > 0 ? (value - range.min) / span : 0.5;
+  const strength = lowerIsBetter ? 1 - position : position;
+  const widthPercent = Math.max(3, Math.min(100, strength * 100));
+
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className="w-20 shrink-0 text-zinc-400">{label}</span>
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
-        <div className={`h-full rounded-full ${colorClass}`} style={{ width: `${widthPercent}%` }} />
+        <div
+          className={`h-full rounded-full ${lowerIsBetter ? "bg-amber-500" : "bg-emerald-500"}`}
+          style={{ width: `${widthPercent}%` }}
+        />
       </div>
       <span className="w-16 shrink-0 text-right text-zinc-300">
         {value}
@@ -29,17 +39,11 @@ function StatBar({ label, value, max, unit, invert }: StatBarProps) {
 
 export interface CarCardProps {
   car: CarData;
-  statMax: {
-    topSpeedKph: number;
-    powerPs: number;
-    weightKg: number;
-    torqueNm: number;
-    accel0to100s: number;
-  };
+  statRanges: StatRanges;
   href: string;
 }
 
-export function CarCard({ car, statMax, href }: CarCardProps) {
+export function CarCard({ car, statRanges, href }: CarCardProps) {
   return (
     <Link
       href={href}
@@ -56,11 +60,11 @@ export function CarCard({ car, statMax, href }: CarCardProps) {
         </div>
       </div>
       <div className="flex flex-col gap-1.5">
-        <StatBar label="Top-Speed" value={car.topSpeedKph} max={statMax.topSpeedKph} unit=" km/h" />
-        <StatBar label="0-100" value={car.accel0to100s} max={statMax.accel0to100s} unit="s" invert />
-        <StatBar label="Leistung" value={car.powerPs} max={statMax.powerPs} unit=" PS" />
-        <StatBar label="Drehmoment" value={car.torqueNm} max={statMax.torqueNm} unit=" Nm" />
-        <StatBar label="Gewicht" value={car.weightKg} max={statMax.weightKg} unit=" kg" invert />
+        <StatBar label="Top-Speed" value={car.topSpeedKph} range={statRanges.topSpeedKph} unit=" km/h" />
+        <StatBar label="0-100" value={car.accel0to100s} range={statRanges.accel0to100s} unit="s" lowerIsBetter />
+        <StatBar label="Leistung" value={car.powerPs} range={statRanges.powerPs} unit=" PS" />
+        <StatBar label="Drehmoment" value={car.torqueNm} range={statRanges.torqueNm} unit=" Nm" />
+        <StatBar label="Gewicht" value={car.weightKg} range={statRanges.weightKg} unit=" kg" lowerIsBetter />
       </div>
     </Link>
   );
