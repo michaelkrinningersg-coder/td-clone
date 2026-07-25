@@ -1,0 +1,59 @@
+name: Deploy to GitHub Pages
+
+# Only tagged versions go live, so the published site is always a deliberate
+# release. Tags are created by .github/workflows/tag.yml.
+on:
+  push:
+    tags: ['v[0-9]*.[0-9]*.[0-9]*']
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deployments overwrite each other; let a running one finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - run: npm ci
+
+      # The Prisma client is gitignored and the API routes are typechecked even
+      # though the static build excludes them, so it has to exist here.
+      - run: npx prisma generate
+
+      - name: Build static export
+        env:
+          NEXT_PUBLIC_STATIC_EXPORT: '1'
+          # e.g. /td-clone for a project site, empty for a user/custom-domain site
+          NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

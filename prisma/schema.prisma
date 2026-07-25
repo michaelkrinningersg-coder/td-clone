@@ -1,0 +1,74 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Drivetrain {
+  FWD
+  RWD
+  AWD
+}
+
+enum TrackType {
+  SPRINT
+  CIRCUIT
+}
+
+model Car {
+  // Deterministic slug (see src/lib/slug.ts) so a time refers to the same car
+  // whether it was stored in SQLite or in the browser's localStorage.
+  id String @id
+
+  // Identity (needed to tell cars apart, not a performance stat)
+  make  String
+  model String
+  year  Int
+
+  // Performance stats - real fields from CarQuery, only cars with ALL of these present are imported
+  topSpeedKph  Float
+  accel0to100s Float
+  powerPs      Float
+  weightKg     Float
+  torqueNm     Float
+  drivetrain   Drivetrain
+  fuelType     String
+
+  timeEntries TimeEntry[]
+
+  @@unique([make, model, year])
+}
+
+model Track {
+  id   String    @id
+  name String    @unique
+  type TrackType
+
+  // Ordered list of segments describing the track layout, see src/lib/track-types.ts
+  // [{ type: "straight" | "corner", lengthM: number, radiusM?: number, gradientPercent?: number }, ...]
+  segmentsJson String
+
+  lengthM Float
+
+  timeEntries TimeEntry[]
+}
+
+model TimeEntry {
+  id      String @id @default(cuid())
+  carId   String
+  trackId String
+  timeMs  Int
+
+  createdAt DateTime @default(now())
+
+  car   Car   @relation(fields: [carId], references: [id])
+  track Track @relation(fields: [trackId], references: [id])
+
+  @@index([trackId, timeMs])
+}

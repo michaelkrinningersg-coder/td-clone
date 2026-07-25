@@ -1,0 +1,98 @@
+[
+  {
+    "make": "Volkswagen",
+    "model": "Golf GTI",
+    "year": 2020,
+    "topSpeedKph": 250,
+    "accel0to100s": 6.2,
+    "powerPs": 245,
+    "weightKg": 1400,
+    "torqueNm": 370,
+    "drivetrain": "FWD",
+    "fuelType": "Petrol"
+  },
+  {
+    "make": "Honda",
+    "model": "Civic Type R",
+    "year": 2021,
+    "topSpeedKph": 272,
+    "accel0to100s": 5.4,
+    "powerPs": 320,
+    "weightKg": 1429,
+    "torqueNm": 400,
+    "drivetrain": "FWD",
+    "fuelType": "Petrol"
+  },
+  {
+    "make": "Toyota",
+    "model": "GR86",
+    "year": 2022,
+    "topSpeedKph": 226,
+    "accel0to100s": 6.3,
+    "powerPs": 235,
+    "weightKg": 1275,
+    "torqueNm": 250,
+    "drivetrain": "RWD",
+    "fuelType": "Petrol"
+  },
+  {
+    "make": "Dodge",
+    "model": "Viper SRT10",
+    "year": 2009,
+    "topSpeedKph": 314,
+    "accel0to100s": 3.9,
+    "powerPs": 600,
+    "weightKg": 1560,
+    "torqueNm": 813,
+    "drivetrain": "RWD",
+    "fuelType": "Petrol"
+  },
+  {
+    "make": "Porsche",
+    "model": "911 Turbo S",
+    "year": 2021,
+    "topSpeedKph": 330,
+    "accel0to100s": 2.7,
+    "powerPs": 650,
+    "weightKg": 1640,
+    "torqueNm": 800,
+    "drivetrain": "AWD",
+    "fuelType": "Petrol"
+  },
+  {
+    "make": "Tesla",
+    "model": "Model S Plaid",
+    "year": 2022,
+    "topSpeedKph": 322,
+    "accel0to100s": 2.1,
+    "powerPs": 1020,
+    "weightKg": 2162,
+    "torqueNm": 1420,
+    "drivetrain": "AWD",
+    "fuelType": "Electric"
+  },
+  {
+    "make": "Ferrari",
+    "model": "SF90 Stradale",
+    "year": 2020,
+    "topSpeedKph": 340,
+    "accel0to100s": 2.5,
+    "powerPs": 1000,
+    "weightKg": 1570,
+    "torqueNm": 800,
+    "drivetrain": "AWD",
+    "fuelType": "Hybrid"
+  },
+  {
+    "make": "Bugatti",
+    "model": "Veyron 16.4",
+    "year": 2010,
+    "topSpeedKph": 407,
+    "accel0to100s": 2.5,
+    "powerPs": 1001,
+    "weightKg": 1888,
+    "torqueNm": 1250,
+    "drivetrain": "AWD",
+    "fuelType": "Petrol"
+  }
+]
