@@ -399,6 +399,50 @@ export function dedupeVariants(cars: ImportedCar[]): ImportedCar[] {
   return result;
 }
 
+/** Thins a model year down to its two ends: the entry-level engine and the most
+ * powerful one.
+ *
+ * The source lists every engine a model was ever sold with - 46 versions of the
+ * 2009 Volvo S80, 167 BMW 5 Series across the years. They are not duplicates,
+ * they genuinely differ, but a picker full of adjacent diesel variants is no
+ * use and the interesting span is between the weakest and the strongest.
+ *
+ * Grouping is by make, model AND year on purpose: collapsing across years would
+ * put a 1995 5 Series and a 2020 one in one group and delete every generation
+ * in between, while the year is shown everywhere in the app. */
+export function keepBaseAndTopVariants(cars: ImportedCar[]): ImportedCar[] {
+  const groups = new Map<string, ImportedCar[]>();
+  for (const car of cars) {
+    const key = `${car.make}|${car.model}|${car.year}`;
+    const group = groups.get(key);
+    if (group) group.push(car);
+    else groups.set(key, [car]);
+  }
+
+  const kept: ImportedCar[] = [];
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      kept.push(group[0]);
+      continue;
+    }
+    // Weakest first. Equal power is broken by the slower 0-100, then by the
+    // variant name so the choice does not depend on the input order.
+    const sorted = [...group].sort(
+      (a, b) =>
+        a.powerPs - b.powerPs ||
+        b.accel0to100s - a.accel0to100s ||
+        a.variant.localeCompare(b.variant),
+    );
+    const base = sorted[0];
+    const top = sorted[sorted.length - 1];
+    kept.push(base);
+    // Equal power at both ends means the group has no span to show, so the
+    // base already is the strongest version and one car covers it.
+    if (top.powerPs > base.powerPs) kept.push(top);
+  }
+  return kept;
+}
+
 /** Guards against obviously broken source rows (a 5000 kg "sports car", a
  * 0.1 s 0-100). These are data errors, not interesting outliers. */
 export function isPlausible(car: ImportedCar): boolean {

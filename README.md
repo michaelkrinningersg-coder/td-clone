@@ -40,14 +40,24 @@ npx serve out
 `npm run import:cars` lädt den von autoevolution abgeleiteten Spec-Datensatz
 [ilyasozkurt/automobile-models-and-specs](https://github.com/ilyasozkurt/automobile-models-and-specs)
 und übernimmt **nur** Autos, bei denen alle benötigten Werte vorhanden sind — Top-Speed,
-0–100 km/h, Leistung, Gewicht, Drehmoment, Antriebsart und Kraftstoffart. Fehlt einer
-davon, fliegt das Auto raus statt geschätzt zu werden. Ergebnis landet in
-`src/data/cars.json` und ist eingecheckt, der Import muss also nicht laufen, um die App
-zu starten.
+0–100 km/h, Leistung, Gewicht, Drehmoment, Antriebsart, Kraftstoffart, cw-Wert, Breite,
+Höhe, Bremsen vorn und hinten, Reifenbreite und Getriebe. Fehlt einer davon, fliegt das
+Auto raus statt geschätzt zu werden. Ergebnis landet in `src/data/cars.json` und ist
+eingecheckt, der Import muss also nicht laufen, um die App zu starten.
 
-Aus 30.066 Motorvarianten bleiben so 5.100 Autos: pro Modell und Baujahr die stärkste
-Variante, entdoppelt über die Auto-ID, plus ein Plausibilitätsfilter gegen offensichtlich
-kaputte Quellzeilen. `MAX_CARS=600 npm run import:cars` begrenzt die Menge.
+Der Trichter von 30.066 Motorvarianten auf 5.503 Autos:
+
+| Schritt | bleiben |
+|---|---|
+| vollständige, plausible Daten | 17.018 |
+| Varianten mit identischen Fahrwerten zusammengefasst | 16.898 |
+| je Marke + Modell + Baujahr nur Einstiegs- und Topmotorisierung | 5.503 |
+
+Der letzte Schritt wirft die Zwischenmotorisierungen weg: die Quelle führt jede je
+verkaufte Version, etwa 46 Ausführungen des Volvo S80 von 2009. Gruppiert wird bewusst
+inklusive Baujahr — über alle Jahre zu gruppieren würde einen 5er von 1995 und einen von
+2020 in dieselbe Gruppe legen und jede Generation dazwischen löschen.
+`MAX_CARS=600 npm run import:cars` begrenzt die Menge zusätzlich.
 
 Der Datensatz führt keine Lizenzdatei und ist von autoevolution.com gescrapt — für einen
 anderen Einsatzzweck wäre das vorab zu klären.

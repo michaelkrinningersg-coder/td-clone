@@ -18,6 +18,7 @@ import {
   parseMillimetres,
   parseTyreWidthMm,
   dedupeVariants,
+  keepBaseAndTopVariants,
   type ImportedCar,
   type RawEngine,
 } from "./car-import";
@@ -326,6 +327,104 @@ describe("dedupeVariants", () => {
     ]);
     const ids = result.map(carSlug);
     assert.equal(new Set(ids).size, ids.length);
+  });
+});
+
+describe("keepBaseAndTopVariants", () => {
+  const car = (over: Partial<ImportedCar>): ImportedCar => ({
+    make: "BMW",
+    model: "5 Series",
+    variant: "520i",
+    year: 2020,
+    powerPs: 150,
+    topSpeedKph: 250,
+    accel0to100s: 5,
+    weightKg: 1500,
+    torqueNm: 400,
+    drivetrain: "RWD",
+    fuelType: "Gasoline",
+    dragCoefficient: 0.32,
+    widthMm: 1800,
+    heightMm: 1450,
+    brakeFront: "ventilated-disc" as const,
+    brakeRear: "disc" as const,
+    tyreWidthMm: 225,
+    gearCount: 6,
+    manualGearbox: false,
+    ...over,
+  });
+
+  it("keeps the weakest and the strongest and drops what is between", () => {
+    const result = keepBaseAndTopVariants([
+      car({ variant: "520i", powerPs: 184 }),
+      car({ variant: "530i", powerPs: 252 }),
+      car({ variant: "540i", powerPs: 340 }),
+      car({ variant: "M550i", powerPs: 530 }),
+    ]);
+    assert.deepEqual(
+      result.map((c) => c.variant).sort(),
+      ["520i", "M550i"],
+    );
+  });
+
+  it("leaves a model year that only has one engine alone", () => {
+    assert.equal(keepBaseAndTopVariants([car({})]).length, 1);
+  });
+
+  it("returns a single car when every variant has the same power", () => {
+    const result = keepBaseAndTopVariants([
+      car({ variant: "a", powerPs: 200 }),
+      car({ variant: "b", powerPs: 200 }),
+    ]);
+    assert.equal(result.length, 1);
+  });
+
+  // Collapsing across years would delete every generation between the oldest
+  // and the newest, and the year is shown throughout the app.
+  it("treats each model year as its own group", () => {
+    const result = keepBaseAndTopVariants([
+      car({ year: 1995, powerPs: 150 }),
+      car({ year: 1995, powerPs: 286 }),
+      car({ year: 2020, powerPs: 184 }),
+      car({ year: 2020, powerPs: 530 }),
+    ]);
+    assert.equal(result.length, 4);
+  });
+
+  it("keeps models and makes apart", () => {
+    const result = keepBaseAndTopVariants([
+      car({ model: "3 Series", powerPs: 150 }),
+      car({ model: "5 Series", powerPs: 150 }),
+      car({ make: "Audi", model: "A4", powerPs: 150 }),
+    ]);
+    assert.equal(result.length, 3);
+  });
+
+  it("picks the slower of two equally strong entry engines as the base", () => {
+    const result = keepBaseAndTopVariants([
+      car({ variant: "quick", powerPs: 150, accel0to100s: 8.0 }),
+      car({ variant: "slow", powerPs: 150, accel0to100s: 9.5 }),
+      car({ variant: "top", powerPs: 400 }),
+    ]);
+    assert.deepEqual(
+      result.map((c) => c.variant).sort(),
+      ["slow", "top"],
+    );
+  });
+
+  it("does not depend on the order the variants arrive in", () => {
+    const variants = [
+      car({ variant: "a", powerPs: 150 }),
+      car({ variant: "b", powerPs: 250 }),
+      car({ variant: "c", powerPs: 400 }),
+    ];
+    const forwards = keepBaseAndTopVariants(variants).map((c) => c.variant).sort();
+    const backwards = keepBaseAndTopVariants([...variants].reverse()).map((c) => c.variant).sort();
+    assert.deepEqual(forwards, backwards);
+  });
+
+  it("returns nothing for nothing", () => {
+    assert.deepEqual(keepBaseAndTopVariants([]), []);
   });
 });
 

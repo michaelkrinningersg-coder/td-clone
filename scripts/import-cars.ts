@@ -17,6 +17,7 @@ import {
   convertEngine,
   isPlausible,
   dedupeVariants,
+  keepBaseAndTopVariants,
   type ImportedCar,
   type RawAutomobile,
   type RawBrand,
@@ -66,7 +67,8 @@ async function main() {
   }
 
   const representative = dedupeVariants(complete);
-  const selected = [...representative].sort((a, b) => b.powerPs - a.powerPs).slice(0, MAX_CARS);
+  const ends = keepBaseAndTopVariants(representative);
+  const selected = [...ends].sort((a, b) => b.powerPs - a.powerPs).slice(0, MAX_CARS);
   const cars = selected.sort(
     (a, b) =>
       a.make.localeCompare(b.make) ||
@@ -83,6 +85,7 @@ async function main() {
       `${engines.length} variants considered`,
       `${complete.length} had complete, plausible data (${implausible} dropped as implausible)`,
       `${representative.length} after collapsing variants that drive identically`,
+      `${ends.length} after keeping only the entry and top engine per model year`,
       `${cars.length} written${Number.isFinite(MAX_CARS) ? ` (MAX_CARS=${MAX_CARS})` : ""}`,
     ].join("\n  -> "),
   );
