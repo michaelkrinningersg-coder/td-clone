@@ -8,6 +8,7 @@ import { CarFilters } from "@/components/CarFilters";
 import { matchesFilter } from "@/lib/filters";
 import { useSession } from "@/lib/selection";
 import { useTrackTimes } from "@/lib/use-track-times";
+import { RandomFill } from "@/components/RandomFill";
 
 /** Second step: which cars go on the grid. The marque index is the main way in,
  * but the filter and the search both cut across brands, so a criterion set here
@@ -58,6 +59,8 @@ export function BrandBrowser() {
         trackName={track?.name}
         resultLabel={resultLabel}
       />
+
+      <RandomFill pool={filtered} timedCarIds={timedCarIds} trackName={track?.name} />
 
       <input
         type="search"

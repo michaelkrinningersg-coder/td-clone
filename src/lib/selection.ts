@@ -17,13 +17,22 @@ const STORAGE_KEY = "td-clone:session";
 export interface SessionState {
   trackId: string | null;
   carIds: string[];
+  /** Starred cars. Independent of the grid: the garage is a shortlist that
+   * survives clearing the field and switching tracks. */
+  garageIds: string[];
   filter: CarFilter;
   /** False until localStorage has been read, so the prerendered markup and the
    * first client render agree before the stored session appears. */
   ready: boolean;
 }
 
-const EMPTY: SessionState = { trackId: null, carIds: [], filter: EMPTY_FILTER, ready: false };
+const EMPTY: SessionState = {
+  trackId: null,
+  carIds: [],
+  garageIds: [],
+  filter: EMPTY_FILTER,
+  ready: false,
+};
 
 let snapshot: SessionState = EMPTY;
 let hydrated = false;
@@ -34,7 +43,12 @@ function persist(next: SessionState) {
   try {
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ trackId: next.trackId, carIds: next.carIds, filter: next.filter }),
+      JSON.stringify({
+        trackId: next.trackId,
+        carIds: next.carIds,
+        garageIds: next.garageIds,
+        filter: next.filter,
+      }),
     );
   } catch {
     // Private mode or a full quota: the session still works for this visit.
@@ -54,6 +68,9 @@ function hydrate() {
         trackId: typeof parsed.trackId === "string" ? parsed.trackId : null,
         carIds: Array.isArray(parsed.carIds)
           ? parsed.carIds.filter((id: unknown): id is string => typeof id === "string").slice(0, MAX_RACERS)
+          : [],
+        garageIds: Array.isArray(parsed.garageIds)
+          ? parsed.garageIds.filter((id: unknown): id is string => typeof id === "string")
           : [],
         // Merged onto the defaults so a filter added later does not arrive undefined.
         filter: { ...EMPTY_FILTER, ...(parsed.filter ?? {}) },
@@ -79,7 +96,11 @@ const getSnapshot = () => snapshot;
 const getServerSnapshot = () => EMPTY;
 
 export function useSession() {
-  const { trackId, carIds, filter, ready } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const { trackId, carIds, garageIds, filter, ready } = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot,
+  );
 
   const setTrack = useCallback((id: string | null) => {
     persist({ ...snapshot, trackId: id, ready: true });
@@ -102,6 +123,24 @@ export function useSession() {
     persist({ ...snapshot, carIds: [], ready: true });
   }, []);
 
+  /** Replaces the whole grid at once, e.g. from the random picker. */
+  const setCars = useCallback((ids: string[]) => {
+    persist({ ...snapshot, carIds: ids.slice(0, MAX_RACERS), ready: true });
+  }, []);
+
+  const toggleGarage = useCallback((carId: string) => {
+    const current = snapshot.garageIds;
+    persist({
+      ...snapshot,
+      garageIds: current.includes(carId) ? current.filter((id) => id !== carId) : [...current, carId],
+      ready: true,
+    });
+  }, []);
+
+  const clearGarage = useCallback(() => {
+    persist({ ...snapshot, garageIds: [], ready: true });
+  }, []);
+
   const setFilter = useCallback((next: CarFilter) => {
     persist({ ...snapshot, filter: next, ready: true });
   }, []);
@@ -113,14 +152,19 @@ export function useSession() {
   return {
     trackId,
     selectedIds: carIds,
+    garageIds,
     filter,
     ready,
     isSelected: (carId: string) => carIds.includes(carId),
     isFull: carIds.length >= MAX_RACERS,
+    isInGarage: (carId: string) => garageIds.includes(carId),
     setTrack,
     toggleCar,
     removeCar,
     clearCars,
+    setCars,
+    toggleGarage,
+    clearGarage,
     setFilter,
     resetFilter,
   };

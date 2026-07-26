@@ -43,29 +43,33 @@ function StatBar({ label, value, range, unit, lowerIsBetter }: StatBarProps) {
 }
 
 export function CarCard({ car, statRanges }: { car: CarData; statRanges: StatRanges }) {
-  const { selectedIds, isSelected, toggleCar, isFull } = useSession();
+  const { selectedIds, isSelected, toggleCar, isFull, isInGarage, toggleGarage } = useSession();
   const selected = isSelected(car.id);
   const gridPosition = selectedIds.indexOf(car.id);
   const color = selected ? raceColor(gridPosition) : null;
   const blocked = isFull && !selected;
   const carClass = carClassOf(car);
+  const starred = isInGarage(car.id);
 
+  // The star is a button of its own, so it cannot sit inside the card button -
+  // nested buttons are invalid markup and the inner click would never fire. It
+  // is laid over the card instead, together with the grid number.
   return (
-    <button
-      type="button"
-      onClick={() => toggleCar(car.id)}
-      disabled={blocked}
-      aria-pressed={selected}
-      className={`flex flex-col gap-3 rounded-xl border bg-zinc-900 p-4 text-left transition-colors ${
-        selected
-          ? `${color!.border} ring-1 ${color!.ring}`
-          : blocked
-            ? "cursor-not-allowed border-zinc-800 opacity-40"
-            : "border-zinc-800 hover:border-emerald-600"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div>
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => toggleCar(car.id)}
+        disabled={blocked}
+        aria-pressed={selected}
+        className={`flex w-full flex-col gap-3 rounded-xl border bg-zinc-900 p-4 text-left transition-colors ${
+          selected
+            ? `${color!.border} ring-1 ${color!.ring}`
+            : blocked
+              ? "cursor-not-allowed border-zinc-800 opacity-40"
+              : "border-zinc-800 hover:border-emerald-600"
+        }`}
+      >
+        <div className="min-w-0 pr-14">
           <div className="text-xs uppercase tracking-wide text-zinc-500">
             <span className="font-medium" style={{ color: brandColor(car.make) }}>
               {car.make}
@@ -87,30 +91,51 @@ export function CarCard({ car, statRanges }: { car: CarData; statRanges: StatRan
             <span className="rounded bg-zinc-800 px-1.5 py-0.5">{car.fuelType}</span>
           </div>
         </div>
-        <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-            selected ? `${color!.bg} text-zinc-950` : "border border-zinc-700 text-transparent"
-          }`}
-          aria-hidden
-        >
-          {selected ? gridPosition + 1 : ""}
-        </span>
-      </div>
 
-      <div className="flex flex-col gap-1.5">
-        <StatBar label="Top-Speed" value={car.topSpeedKph} range={statRanges.topSpeedKph} unit=" km/h" />
-        <StatBar label="0-100" value={car.accel0to100s} range={statRanges.accel0to100s} unit="s" lowerIsBetter />
-        <StatBar label="Leistung" value={car.powerPs} range={statRanges.powerPs} unit=" PS" />
-        <StatBar label="Drehmoment" value={car.torqueNm} range={statRanges.torqueNm} unit=" Nm" />
-        <StatBar label="Gewicht" value={car.weightKg} range={statRanges.weightKg} unit=" kg" lowerIsBetter />
-        <StatBar
-          label="kg/PS"
-          value={Math.round(powerToWeight(car) * 10) / 10}
-          range={statRanges.powerToWeight}
-          unit=""
-          lowerIsBetter
-        />
+        <div className="flex flex-col gap-1.5">
+          <StatBar label="Top-Speed" value={car.topSpeedKph} range={statRanges.topSpeedKph} unit=" km/h" />
+          <StatBar
+            label="0-100"
+            value={car.accel0to100s}
+            range={statRanges.accel0to100s}
+            unit="s"
+            lowerIsBetter
+          />
+          <StatBar label="Leistung" value={car.powerPs} range={statRanges.powerPs} unit=" PS" />
+          <StatBar label="Drehmoment" value={car.torqueNm} range={statRanges.torqueNm} unit=" Nm" />
+          <StatBar label="Gewicht" value={car.weightKg} range={statRanges.weightKg} unit=" kg" lowerIsBetter />
+          <StatBar
+            label="kg/PS"
+            value={Math.round(powerToWeight(car) * 10) / 10}
+            range={statRanges.powerToWeight}
+            unit=""
+            lowerIsBetter
+          />
+        </div>
+      </button>
+
+      <div className="absolute right-3 top-3 flex items-center gap-1.5">
+        {selected && (
+          <span
+            className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${color!.bg} text-zinc-950`}
+            aria-hidden
+          >
+            {gridPosition + 1}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => toggleGarage(car.id)}
+          aria-pressed={starred}
+          aria-label={starred ? `${car.model} aus der Garage nehmen` : `${car.model} in die Garage legen`}
+          title={starred ? "Aus der Garage nehmen" : "In die Garage legen"}
+          className={`text-lg leading-none transition-colors ${
+            starred ? "text-amber-300 hover:text-amber-200" : "text-zinc-700 hover:text-zinc-400"
+          }`}
+        >
+          {starred ? "★" : "☆"}
+        </button>
       </div>
-    </button>
+    </div>
   );
 }

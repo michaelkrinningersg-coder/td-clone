@@ -41,6 +41,9 @@ export default function RootLayout({
               <Link href="/cars" className="text-zinc-400 hover:text-white">
                 Autos
               </Link>
+              <Link href="/garage" className="text-zinc-400 hover:text-white">
+                Garage
+              </Link>
               <Link href="/standings" className="text-zinc-400 hover:text-white">
                 Gesamtwertung
               </Link>
