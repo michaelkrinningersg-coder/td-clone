@@ -44,6 +44,9 @@ export default function RootLayout({
               <Link href="/garage" className="text-zinc-400 hover:text-white">
                 Garage
               </Link>
+              <Link href="/championship" className="text-zinc-400 hover:text-white">
+                Meisterschaft
+              </Link>
               <Link href="/standings" className="text-zinc-400 hover:text-white">
                 Gesamtwertung
               </Link>

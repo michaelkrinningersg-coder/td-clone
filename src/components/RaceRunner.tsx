@@ -17,7 +17,22 @@ const CHART_HEIGHT = 110;
 
 type Phase = "idle" | "running" | "finished";
 
-export function RaceRunner({ cars, track }: { cars: CarData[]; track: TrackData }) {
+export function RaceRunner({
+  cars,
+  track,
+  saveTimes = true,
+  onFinish,
+  outro,
+}: {
+  cars: CarData[];
+  track: TrackData;
+  /** Off for a run that should not touch the leaderboard. */
+  saveTimes?: boolean;
+  /** Called once with every car's time when the replay has run out. */
+  onFinish?: (results: { carId: string; timeMs: number }[]) => void;
+  /** Replaces the links under the result, e.g. with "next heat". */
+  outro?: React.ReactNode;
+}) {
   const path = useMemo(
     () => buildTrackPath(track.segments, Math.max(5, track.lengthM / 600)),
     [track],
@@ -88,14 +103,17 @@ export function RaceRunner({ cars, track }: { cars: CarData[]; track: TrackData 
 
   async function persist() {
     try {
-      for (const { car, sim } of sims) {
-        await timeStore.saveRun(car.id, track.id, sim.totalTimeMs);
+      if (saveTimes) {
+        for (const { car, sim } of sims) {
+          await timeStore.saveRun(car.id, track.id, sim.totalTimeMs);
+        }
+        setSavedAt(Date.now());
       }
-      setSavedAt(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Zeiten konnten nicht gespeichert werden.");
     } finally {
       setPhase("finished");
+      onFinish?.(sims.map(({ car, sim }) => ({ carId: car.id, timeMs: sim.totalTimeMs })));
     }
   }
 
@@ -199,6 +217,7 @@ export function RaceRunner({ cars, track }: { cars: CarData[]; track: TrackData 
           </div>
           <div className="font-mono text-2xl text-emerald-400">{formatTimeMs(ranked[0]?.totalTimeMs ?? 0)}</div>
           {error && <p className="mt-2 text-amber-400">{error}</p>}
+          {outro ?? (
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href={`/leaderboard/${track.id}`}
@@ -219,6 +238,7 @@ export function RaceRunner({ cars, track }: { cars: CarData[]; track: TrackData 
               Autos ändern
             </Link>
           </div>
+          )}
         </div>
       )}
     </div>
