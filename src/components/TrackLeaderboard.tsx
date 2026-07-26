@@ -2,19 +2,16 @@
 
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
-import { getCar, statRanges, type TrackData } from "@/lib/data";
+import { getCar, type TrackData } from "@/lib/data";
 import { buildTrackPath, toSvgPath } from "@/lib/track-geometry";
 import { formatTimeMs } from "@/lib/format";
 import { useTrackTimes } from "@/lib/use-track-times";
+import { RankingRow } from "@/components/RankingRow";
 
 const PADDING = 20;
 
 /** Places 1-3 get their own colour so the top of the board reads at a glance. */
-const PODIUM = [
-  "border-amber-400/60 bg-amber-400/10 text-amber-300",
-  "border-zinc-400/50 bg-zinc-400/10 text-zinc-300",
-  "border-orange-700/60 bg-orange-700/15 text-orange-400",
-];
+const PODIUM = ["text-amber-300", "text-zinc-300", "text-orange-400"];
 
 export function TrackLeaderboard({ track, highlight }: { track: TrackData; highlight?: string }) {
   const { entries } = useTrackTimes(track.id);
@@ -100,54 +97,26 @@ export function TrackLeaderboard({ track, highlight }: { track: TrackData; highl
           Kein Auto in der Rangliste passt zur Suche.
         </p>
       ) : (
-        <ol className="mt-4 flex flex-col gap-2">
-          {rows.map(({ entry, position, car }) => {
-            const podium = position <= 3 ? PODIUM[position - 1] : null;
-            const gapMs = entry.timeMs - (best?.timeMs ?? entry.timeMs);
-            const powerShare = car
-              ? Math.max(3, Math.min(100, (car.powerPs / statRanges.powerPs.max) * 100))
-              : 0;
-            return (
-              <li
-                key={entry.id}
-                className={`flex items-center gap-4 rounded-xl border p-3 ${
-                  entry.id === highlight
-                    ? "border-emerald-500 bg-emerald-950/30"
-                    : "border-zinc-800 bg-zinc-900"
-                }`}
-              >
-                <span
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border font-mono text-lg font-bold ${
-                    podium ?? "border-zinc-800 text-zinc-500"
-                  }`}
-                >
-                  {position}
-                </span>
-
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-white">
-                    {car ? `${car.make} ${car.model}` : entry.carId}
-                    {car && <span className="text-zinc-500"> ({car.year})</span>}
-                  </div>
-                  <div className="truncate text-xs text-zinc-500">
-                    {car ? `${car.variant} · ${car.powerPs} PS · ${car.drivetrain}` : "Auto nicht mehr im Bestand"}
-                  </div>
-                  {car && (
-                    <div className="mt-1.5 h-1 w-full max-w-40 overflow-hidden rounded-full bg-zinc-800">
-                      <div className="h-full rounded-full bg-zinc-600" style={{ width: `${powerShare}%` }} />
-                    </div>
-                  )}
-                </div>
-
-                <div className="shrink-0 text-right">
-                  <div className="font-mono text-lg text-white">{formatTimeMs(entry.timeMs)}</div>
-                  <div className="font-mono text-xs text-zinc-500">
-                    {position === 1 ? "Bestzeit" : `+${(gapMs / 1000).toFixed(2)}s`}
-                  </div>
-                </div>
-              </li>
-            );
-          })}
+        <ol className="mt-4 flex flex-col gap-px overflow-hidden rounded-xl bg-zinc-800">
+          {rows.map(({ entry, position, car }) => (
+            <RankingRow
+              key={entry.id}
+              car={car}
+              fallbackName={entry.carId}
+              // The board is not a race, so nothing here carries a grid colour;
+              // the top three are marked by their position instead.
+              gridIndex={-1}
+              position={position}
+              time={formatTimeMs(entry.timeMs)}
+              note={
+                position === 1
+                  ? "Bestzeit"
+                  : `+${((entry.timeMs - (best?.timeMs ?? entry.timeMs)) / 1000).toFixed(2)}s`
+              }
+              highlighted={entry.id === highlight}
+              podiumClass={position <= 3 ? PODIUM[position - 1] : undefined}
+            />
+          ))}
         </ol>
       )}
     </div>

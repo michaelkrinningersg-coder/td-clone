@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import type { CarData, TrackData } from "@/lib/data";
 import { getCar } from "@/lib/data";
-import { formatGap, raceColor, type RankedRacer } from "@/lib/race";
+import { formatGap, type RankedRacer } from "@/lib/race";
 import { formatTimeMs } from "@/lib/format";
 import { timeStore, type TimeEntryData } from "@/lib/time-store";
+import { RankingRow } from "@/components/RankingRow";
 
 type View = "race" | "overall";
 
@@ -18,7 +19,7 @@ interface LiveRankingProps {
   savedAt: number;
 }
 
-/** The board beside the simulation. It opens on every time ever set on this
+/** The board under the simulation. It opens on every time ever set on this
  * track so a run lands in context immediately, with the duel one click away. */
 export function LiveRanking({ ranked, cars, track, savedAt }: LiveRankingProps) {
   const [view, setView] = useState<View>("overall");
@@ -80,56 +81,24 @@ function RaceView({
   return (
     <ol className="flex flex-col gap-px bg-zinc-800">
       {ranked.map((racer) => {
-        const car = carsById.get(racer.carId);
-        const color = raceColor(racer.gridIndex);
         const progress = Math.min(100, (racer.distanceM / trackLengthM) * 100);
         return (
-          <li
+          <RankingRow
             key={racer.carId}
-            // Each row carries its car's racing colour, so a glance at the board
-            // and a glance at the track show the same thing.
-            className="relative border-l-4 bg-zinc-900 py-3 pl-3 pr-4"
-            style={{ borderLeftColor: color.hex }}
-          >
-            {/* The lap progress sits behind the row rather than beside it, so
-                the bar reads as "how far along" without stealing a column. */}
-            <div
-              className={`absolute inset-y-0 left-0 ${color.bg} opacity-10 transition-[width] duration-100`}
-              style={{ width: `${progress}%` }}
-              aria-hidden
-            />
-            <div className="relative flex items-center gap-3">
-              <span
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                  racer.position === 1 ? `${color.bg} text-zinc-950` : "bg-zinc-800 text-zinc-400"
-                }`}
-              >
-                {racer.position}
-              </span>
-
-              <div className="min-w-0 flex-1">
-                <span className={`block truncate text-sm ${color.text}`}>
-                  {car ? `${car.make} ${car.model}` : racer.carId}
-                </span>
-                <span className="mt-0.5 block truncate text-xs text-zinc-500">
-                  {racer.finished
-                    ? "im Ziel"
-                    : `${racer.speedKph.toFixed(0)} km/h · ${(racer.distanceM / 1000).toFixed(2)} km · ${progress.toFixed(0)} %`}
-                </span>
-              </div>
-
-              <div className="shrink-0 text-right">
-                {/* This car's own clock - running while it drives, stopped at
-                    its lap time once it is home. */}
-                <div
-                  className={`font-mono text-lg tabular-nums ${racer.finished ? color.text : "text-white"}`}
-                >
-                  {formatTimeMs(racer.elapsedMs)}
-                </div>
-                <div className="font-mono text-xs text-zinc-500">{formatGap(racer)}</div>
-              </div>
-            </div>
-          </li>
+            car={carsById.get(racer.carId)}
+            fallbackName={racer.carId}
+            gridIndex={racer.gridIndex}
+            position={racer.position}
+            // Each car's own clock: running while it drives, stopped at its lap
+            // time the moment it crosses the line.
+            time={formatTimeMs(racer.elapsedMs)}
+            note={
+              racer.finished
+                ? formatGap(racer)
+                : `${racer.speedKph.toFixed(0)} km/h · ${progress.toFixed(0)} %`
+            }
+            progressPercent={progress}
+          />
         );
       })}
     </ol>
@@ -153,10 +122,13 @@ function OverallView({ ranked, track, savedAt }: { ranked: RankedRacer[]; track:
   if (entries === null) return <p className="px-4 py-6 text-sm text-zinc-500">Lade Zeiten...</p>;
 
   const gridIndexOf = (carId: string) => ranked.find((r) => r.carId === carId)?.gridIndex ?? -1;
-  const stored = entries.map((entry) => ({
+  const best = entries[0]?.timeMs;
+
+  const stored = entries.map((entry, i) => ({
     key: entry.id,
     carId: entry.carId,
     timeMs: entry.timeMs as number | null,
+    position: (i + 1) as number | null,
     gridIndex: gridIndexOf(entry.carId),
   }));
 
@@ -164,58 +136,34 @@ function OverallView({ ranked, track, savedAt }: { ranked: RankedRacer[]; track:
   // cross the line - at which point their stored entry takes its real place.
   const running = ranked
     .filter((r) => !r.finished)
-    .map((r) => ({ key: `live-${r.carId}`, carId: r.carId, timeMs: null, gridIndex: r.gridIndex }));
+    .map((r) => ({ key: `live-${r.carId}`, carId: r.carId, timeMs: null, position: null, gridIndex: r.gridIndex }));
 
   const rows = [...stored, ...running];
-  const best = entries[0]?.timeMs;
 
   if (rows.length === 0) {
     return <p className="px-4 py-6 text-sm text-zinc-500">Noch keine Zeiten auf dieser Strecke.</p>;
   }
 
   return (
-    <ol className="max-h-[28rem] overflow-y-auto">
-      {rows.map((row, i) => {
-        const car = getCar(row.carId);
-        const racing = row.gridIndex >= 0;
-        const color = racing ? raceColor(row.gridIndex) : null;
-        return (
-          <li
-            key={row.key}
-            className={`flex items-center gap-3 border-b border-zinc-800 px-4 py-2 last:border-b-0 ${
-              racing ? "bg-zinc-800/50" : ""
-            }`}
-          >
-            <span className="w-6 shrink-0 text-center font-mono text-sm text-zinc-500">
-              {row.timeMs === null ? "–" : i + 1}
-            </span>
-            <span
-              className={`h-2.5 w-2.5 shrink-0 rounded-full ${color ? color.bg : "bg-zinc-700"}`}
-              aria-hidden
-            />
-            <div className="min-w-0 flex-1">
-              <div className={`truncate text-sm ${racing ? "text-white" : "text-zinc-300"}`}>
-                {car ? `${car.make} ${car.model}` : row.carId}
-              </div>
-              {car && <div className="truncate text-xs text-zinc-600">{car.variant}</div>}
-            </div>
-            <div className="shrink-0 text-right">
-              {row.timeMs === null ? (
-                <span className="text-xs text-zinc-500">unterwegs</span>
-              ) : (
-                <>
-                  <div className="font-mono text-sm text-white">{formatTimeMs(row.timeMs)}</div>
-                  {best !== undefined && row.timeMs > best && (
-                    <div className="font-mono text-xs text-zinc-600">
-                      +{((row.timeMs - best) / 1000).toFixed(2)}s
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </li>
-        );
-      })}
+    <ol className="flex max-h-[28rem] flex-col gap-px overflow-y-auto bg-zinc-800">
+      {rows.map((row) => (
+        <RankingRow
+          key={row.key}
+          car={getCar(row.carId)}
+          fallbackName={row.carId}
+          gridIndex={row.gridIndex}
+          position={row.position}
+          time={row.timeMs === null ? "—" : formatTimeMs(row.timeMs)}
+          note={
+            row.timeMs === null
+              ? "unterwegs"
+              : best === undefined || row.timeMs === best
+                ? "Bestzeit"
+                : `+${((row.timeMs - best) / 1000).toFixed(2)}s`
+          }
+          highlighted={row.gridIndex >= 0}
+        />
+      ))}
     </ol>
   );
 }

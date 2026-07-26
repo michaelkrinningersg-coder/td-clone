@@ -7,6 +7,10 @@ export const RACE_COLORS = [
   { hex: "#60a5fa", text: "text-blue-400", bg: "bg-blue-400", ring: "ring-blue-500", border: "border-blue-500" },
   { hex: "#fbbf24", text: "text-amber-400", bg: "bg-amber-400", ring: "ring-amber-500", border: "border-amber-500" },
   { hex: "#f472b6", text: "text-pink-400", bg: "bg-pink-400", ring: "ring-pink-500", border: "border-pink-500" },
+  { hex: "#a78bfa", text: "text-violet-400", bg: "bg-violet-400", ring: "ring-violet-500", border: "border-violet-500" },
+  { hex: "#22d3ee", text: "text-cyan-400", bg: "bg-cyan-400", ring: "ring-cyan-500", border: "border-cyan-500" },
+  { hex: "#fb923c", text: "text-orange-400", bg: "bg-orange-400", ring: "ring-orange-500", border: "border-orange-500" },
+  { hex: "#a3e635", text: "text-lime-400", bg: "bg-lime-400", ring: "ring-lime-500", border: "border-lime-500" },
 ] as const;
 
 export const MAX_RACERS = RACE_COLORS.length;

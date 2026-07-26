@@ -1,0 +1,85 @@
+"use client";
+
+import type { CarData } from "@/lib/data";
+import { raceColor } from "@/lib/race";
+
+/** One line of a ranking, shared by the live board and the track board so both
+ * read the same way: marque in its own column, then the car, then its specs,
+ * with the time and the position closing the line on the right.
+ *
+ * The columns collapse on narrow screens - specs go first, then the marque -
+ * rather than letting the line wrap and stop being one line. */
+export function RankingRow({
+  car,
+  fallbackName,
+  gridIndex,
+  position,
+  time,
+  note,
+  progressPercent,
+  highlighted,
+  podiumClass,
+}: {
+  car: CarData | undefined;
+  /** Shown when the car is no longer in the dataset. */
+  fallbackName: string;
+  /** Slot in the starting grid; -1 for a car that is not in this race. */
+  gridIndex: number;
+  /** Null while a car is still driving and has no place yet. */
+  position: number | null;
+  time: string;
+  /** Gap to the leader, or a live readout while the car is still driving.
+   * Sits before the time so that time and position stay side by side. */
+  note?: string;
+  /** Fills the row behind the content to show how far along the lap the car is. */
+  progressPercent?: number;
+  highlighted?: boolean;
+  /** Colours the position for places 1-3 on boards that have no grid colours. */
+  podiumClass?: string;
+}) {
+  const color = gridIndex >= 0 ? raceColor(gridIndex) : null;
+
+  return (
+    <li
+      className={`relative border-l-4 px-3 py-2.5 ${highlighted ? "bg-emerald-950/30" : "bg-zinc-900"}`}
+      style={{ borderLeftColor: color?.hex ?? "#3f3f46" }}
+    >
+      {progressPercent !== undefined && (
+        <div
+          className={`absolute inset-y-0 left-0 ${color?.bg ?? "bg-zinc-700"} opacity-10 transition-[width] duration-100`}
+          style={{ width: `${progressPercent}%` }}
+          aria-hidden
+        />
+      )}
+
+      <div className="relative flex items-center gap-3">
+        <span className="w-24 shrink-0 truncate text-xs uppercase tracking-wide text-zinc-500 sm:w-32">
+          {car?.make ?? "—"}
+        </span>
+
+        <span className={`min-w-0 flex-1 truncate text-sm ${color ? color.text : "text-zinc-200"}`}>
+          {car ? car.model : fallbackName}
+          {car && <span className="text-zinc-600"> ’{String(car.year).slice(2)}</span>}
+        </span>
+
+        <span className="hidden min-w-0 flex-1 truncate text-xs text-zinc-500 lg:block">
+          {car ? `${car.variant} · ${car.powerPs} PS · ${car.drivetrain}` : "Auto nicht mehr im Bestand"}
+        </span>
+
+        <span className="hidden w-32 shrink-0 truncate text-right font-mono text-xs text-zinc-500 sm:block">
+          {note ?? ""}
+        </span>
+
+        <span className="w-20 shrink-0 text-right font-mono text-sm tabular-nums text-white">{time}</span>
+
+        <span
+          className={`w-9 shrink-0 text-right font-mono text-lg font-bold ${
+            podiumClass ?? (position === 1 ? (color?.text ?? "text-white") : "text-zinc-500")
+          }`}
+        >
+          {position === null ? "–" : `${position}.`}
+        </span>
+      </div>
+    </li>
+  );
+}
