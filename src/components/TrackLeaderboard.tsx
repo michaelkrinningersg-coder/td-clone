@@ -116,6 +116,7 @@ export function TrackLeaderboard({ track, highlight }: { track: TrackData; highl
               }
               highlighted={entry.id === highlight}
               podiumClass={position <= 3 ? PODIUM[position - 1] : undefined}
+              brandColored
               onDelete={async () => {
                 await timeStore.deleteEntry(entry.id);
                 reload();

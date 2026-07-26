@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { CarData } from "@/lib/data";
 import { raceColor } from "@/lib/race";
+import { brandColor } from "@/lib/brand-colors";
 
 /** One line of a ranking, shared by the live board and the track board so both
  * read the same way: marque in its own column, then the car, then its specs,
@@ -20,6 +21,7 @@ export function RankingRow({
   progressPercent,
   highlighted,
   podiumClass,
+  brandColored,
   onDelete,
 }: {
   car: CarData | undefined;
@@ -38,6 +40,9 @@ export function RankingRow({
   highlighted?: boolean;
   /** Colours the position for places 1-3 on boards that have no grid colours. */
   podiumClass?: string;
+  /** Tints the marque column with that marque's colour. Off during a race,
+   * where the grid colours carry the meaning instead. */
+  brandColored?: boolean;
   /** When given, the row offers to delete its recorded time. */
   onDelete?: () => void | Promise<void>;
 }) {
@@ -71,7 +76,10 @@ export function RankingRow({
       )}
 
       <div className="relative flex items-center gap-3">
-        <span className="w-24 shrink-0 truncate text-xs uppercase tracking-wide text-zinc-500 sm:w-32">
+        <span
+          className="w-24 shrink-0 truncate text-xs font-medium uppercase tracking-wide text-zinc-500 sm:w-32"
+          style={brandColored && car ? { color: brandColor(car.make) } : undefined}
+        >
           {car?.make ?? "—"}
         </span>
 

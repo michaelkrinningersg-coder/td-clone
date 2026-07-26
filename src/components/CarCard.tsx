@@ -2,6 +2,7 @@
 
 import type { CarData, StatRange, StatRanges } from "@/lib/data";
 import { raceColor } from "@/lib/race";
+import { brandColor } from "@/lib/brand-colors";
 import { useSession } from "@/lib/selection";
 
 interface StatBarProps {
@@ -64,7 +65,10 @@ export function CarCard({ car, statRanges }: { car: CarData; statRanges: StatRan
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-xs uppercase tracking-wide text-zinc-500">
-            {car.make} · {car.year}
+            <span className="font-medium" style={{ color: brandColor(car.make) }}>
+              {car.make}
+            </span>{" "}
+            · {car.year}
           </div>
           <div className="text-lg font-semibold text-white">{car.model}</div>
           <div className="truncate text-xs text-zinc-400" title={car.variant}>
