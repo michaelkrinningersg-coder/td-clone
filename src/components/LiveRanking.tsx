@@ -132,38 +132,66 @@ function OverallView({ ranked, track, savedAt }: { ranked: RankedRacer[]; track:
     gridIndex: gridIndexOf(entry.carId),
   }));
 
-  // Cars still driving have no time yet, so they sit at the end until they
-  // cross the line - at which point their stored entry takes its real place.
+  // A car driving for the first time has no time yet, so it waits at the end
+  // until it crosses the line and its entry takes its real place. One that
+  // already holds a time keeps that row instead of appearing twice.
+  const storedCarIds = new Set(entries.map((e) => e.carId));
   const running = ranked
-    .filter((r) => !r.finished)
+    .filter((r) => !r.finished && !storedCarIds.has(r.carId))
     .map((r) => ({ key: `live-${r.carId}`, carId: r.carId, timeMs: null, position: null, gridIndex: r.gridIndex }));
 
   const rows = [...stored, ...running];
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && ranked.length === 0) {
     return <p className="px-4 py-6 text-sm text-zinc-500">Noch keine Zeiten auf dieser Strecke.</p>;
   }
 
   return (
-    <ol className="flex max-h-[28rem] flex-col gap-px overflow-y-auto bg-zinc-800">
-      {rows.map((row) => (
-        <RankingRow
-          key={row.key}
-          car={getCar(row.carId)}
-          fallbackName={row.carId}
-          gridIndex={row.gridIndex}
-          position={row.position}
-          time={row.timeMs === null ? "—" : formatTimeMs(row.timeMs)}
-          note={
-            row.timeMs === null
-              ? "unterwegs"
-              : best === undefined || row.timeMs === best
-                ? "Bestzeit"
-                : `+${((row.timeMs - best) / 1000).toFixed(2)}s`
-          }
-          highlighted={row.gridIndex >= 0}
-        />
-      ))}
-    </ol>
+    <div className="max-h-[28rem] overflow-y-auto">
+      {/* The cars in this race stay pinned at the top in their current running
+          order, so they never scroll out of sight - while still appearing in
+          their real place in the board below once they have a time. */}
+      {ranked.length > 0 && (
+        <div className="sticky top-0 z-10 border-b border-zinc-700 bg-zinc-950/95 backdrop-blur">
+          <div className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+            Dieses Rennen
+          </div>
+          <ol className="flex flex-col gap-px bg-zinc-800">
+            {ranked.map((racer) => (
+              <RankingRow
+                key={`pinned-${racer.carId}`}
+                car={getCar(racer.carId)}
+                fallbackName={racer.carId}
+                gridIndex={racer.gridIndex}
+                position={racer.position}
+                time={formatTimeMs(racer.elapsedMs)}
+                note={racer.finished ? formatGap(racer) : `${racer.speedKph.toFixed(0)} km/h`}
+              />
+            ))}
+          </ol>
+        </div>
+      )}
+
+      <ol className="flex flex-col gap-px bg-zinc-800">
+        {rows.map((row) => (
+          <RankingRow
+            key={row.key}
+            car={getCar(row.carId)}
+            fallbackName={row.carId}
+            gridIndex={row.gridIndex}
+            position={row.position}
+            time={row.timeMs === null ? "—" : formatTimeMs(row.timeMs)}
+            note={
+              row.timeMs === null
+                ? "unterwegs"
+                : best === undefined || row.timeMs === best
+                  ? "Bestzeit"
+                  : `+${((row.timeMs - best) / 1000).toFixed(2)}s`
+            }
+            highlighted={row.gridIndex >= 0}
+          />
+        ))}
+      </ol>
+    </div>
   );
 }
