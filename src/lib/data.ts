@@ -119,6 +119,12 @@ export const statRanges = {
   weightKg: rangeOf((c) => c.weightKg),
   torqueNm: rangeOf((c) => c.torqueNm),
   accel0to100s: rangeOf((c) => c.accel0to100s),
+  year: rangeOf((c) => c.year),
 };
+
+/** Every fuel type present, so the filter offers exactly what exists. */
+export const fuelTypes: string[] = Array.from(new Set(cars.map((c) => c.fuelType))).sort((a, b) =>
+  a.localeCompare(b),
+);
 
 export type StatRanges = typeof statRanges;

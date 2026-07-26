@@ -2,23 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getCars } from "@/lib/data";
+import { getCars, getTrack } from "@/lib/data";
 import { MAX_RACERS, raceColor } from "@/lib/race";
-import { useSelection } from "@/lib/selection";
+import { useSession } from "@/lib/selection";
 
-/** Sticky footer showing the current grid. It follows the user across brands so
- * the selection is never out of sight while browsing, and turns into the way
- * forward once at least one car is picked. */
+/** Sticky footer showing the grid being assembled. It follows the user across
+ * brands so the selection is never out of sight, and is the way onward once at
+ * least one car is picked. */
 export function SelectionBar() {
-  const { selectedIds, remove, clear, ready } = useSelection();
+  const { trackId, selectedIds, removeCar, clearCars, ready } = useSession();
   const pathname = usePathname();
 
-  // The bar is the way onward from picking cars; on the race pages it would
-  // only be in the way.
+  // On the race and leaderboard pages the bar would only be in the way.
   const hidden = pathname.startsWith("/race") || pathname.startsWith("/leaderboard");
   if (!ready || hidden || selectedIds.length === 0) return null;
 
   const selected = getCars(selectedIds);
+  const track = getTrack(trackId ?? "");
 
   return (
     <div className="sticky bottom-0 z-10 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur">
@@ -38,7 +38,7 @@ export function SelectionBar() {
                 {car.make} {car.model}
               </span>
               <button
-                onClick={() => remove(car.id)}
+                onClick={() => removeCar(car.id)}
                 aria-label={`${car.make} ${car.model} entfernen`}
                 className="rounded-full px-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-white"
               >
@@ -48,15 +48,25 @@ export function SelectionBar() {
           ))}
         </ul>
 
-        <button onClick={clear} className="text-sm text-zinc-500 hover:text-zinc-300">
+        <button onClick={clearCars} className="text-sm text-zinc-500 hover:text-zinc-300">
           Leeren
         </button>
-        <Link
-          href="/tracks"
-          className="rounded-full bg-emerald-500 px-5 py-2 font-semibold text-zinc-950 hover:bg-emerald-400"
-        >
-          Strecke wählen
-        </Link>
+
+        {track ? (
+          <Link
+            href={`/race?cars=${selectedIds.join(",")}&trackId=${track.id}`}
+            className="rounded-full bg-emerald-500 px-5 py-2 font-semibold text-zinc-950 hover:bg-emerald-400"
+          >
+            Rennen auf {track.name}
+          </Link>
+        ) : (
+          <Link
+            href="/"
+            className="rounded-full bg-emerald-500 px-5 py-2 font-semibold text-zinc-950 hover:bg-emerald-400"
+          >
+            Strecke wählen
+          </Link>
+        )}
       </div>
     </div>
   );

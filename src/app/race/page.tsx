@@ -19,7 +19,7 @@ function Race() {
       <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
         <p className="text-zinc-400">Auto oder Strecke nicht gefunden.</p>
         <Link href="/" className="mt-4 inline-block text-emerald-400 hover:text-emerald-300">
-          ← Zur Markenauswahl
+          ← Zur Autoauswahl
         </Link>
       </div>
     );

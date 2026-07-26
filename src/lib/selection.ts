@@ -2,57 +2,68 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { MAX_RACERS } from "@/lib/race";
+import { EMPTY_FILTER, type CarFilter } from "@/lib/filters";
 
-/** The picked cars have to survive navigating between brands, so the selection
- * lives outside React in a small store mirrored to localStorage. Order matters:
- * it decides which racing colour each car gets.
+/** The track, the picked cars and the filter all have to survive navigating
+ * between brands, so they live outside React in a small store mirrored to
+ * localStorage. The order of the cars matters: it decides which racing colour
+ * each one gets.
  *
  * localStorage is an external system, so this is a useSyncExternalStore case
  * rather than state copied into React by an effect. */
 
-const STORAGE_KEY = "td-clone:selection";
+const STORAGE_KEY = "td-clone:session";
 
-export interface SelectionState {
-  ids: string[];
+export interface SessionState {
+  trackId: string | null;
+  carIds: string[];
+  filter: CarFilter;
   /** False until localStorage has been read, so the prerendered markup and the
-   * first client render agree before the stored grid appears. */
+   * first client render agree before the stored session appears. */
   ready: boolean;
 }
 
-const EMPTY: SelectionState = { ids: [], ready: false };
+const EMPTY: SessionState = { trackId: null, carIds: [], filter: EMPTY_FILTER, ready: false };
 
-let snapshot: SelectionState = EMPTY;
+let snapshot: SessionState = EMPTY;
 let hydrated = false;
 const listeners = new Set<() => void>();
 
-function emit() {
-  for (const listener of listeners) listener();
-}
-
-function setIds(ids: string[]) {
-  snapshot = { ids, ready: true };
+function persist(next: SessionState) {
+  snapshot = next;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ trackId: next.trackId, carIds: next.carIds, filter: next.filter }),
+    );
   } catch {
-    // Private mode or a full quota: the selection still works for this visit.
+    // Private mode or a full quota: the session still works for this visit.
   }
-  emit();
+  for (const listener of listeners) listener();
 }
 
 function hydrate() {
   if (hydrated) return;
   hydrated = true;
-  let ids: string[] = [];
+  let restored: SessionState = { ...EMPTY, ready: true };
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : null;
-    if (Array.isArray(parsed)) {
-      ids = parsed.filter((id): id is string => typeof id === "string").slice(0, MAX_RACERS);
+    if (parsed && typeof parsed === "object") {
+      restored = {
+        trackId: typeof parsed.trackId === "string" ? parsed.trackId : null,
+        carIds: Array.isArray(parsed.carIds)
+          ? parsed.carIds.filter((id: unknown): id is string => typeof id === "string").slice(0, MAX_RACERS)
+          : [],
+        // Merged onto the defaults so a filter added later does not arrive undefined.
+        filter: { ...EMPTY_FILTER, ...(parsed.filter ?? {}) },
+        ready: true,
+      };
     }
   } catch {
-    // A corrupt entry just means starting with an empty selection.
+    // A corrupt entry just means starting fresh.
   }
-  snapshot = { ids, ready: true };
+  snapshot = restored;
 }
 
 function subscribe(listener: () => void) {
@@ -67,28 +78,50 @@ function subscribe(listener: () => void) {
 const getSnapshot = () => snapshot;
 const getServerSnapshot = () => EMPTY;
 
-export function useSelection() {
-  const { ids, ready } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+export function useSession() {
+  const { trackId, carIds, filter, ready } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  const toggle = useCallback((carId: string) => {
-    const current = snapshot.ids;
-    if (current.includes(carId)) setIds(current.filter((id) => id !== carId));
-    else if (current.length < MAX_RACERS) setIds([...current, carId]);
+  const setTrack = useCallback((id: string | null) => {
+    persist({ ...snapshot, trackId: id, ready: true });
   }, []);
 
-  const remove = useCallback((carId: string) => {
-    setIds(snapshot.ids.filter((id) => id !== carId));
+  const toggleCar = useCallback((carId: string) => {
+    const current = snapshot.carIds;
+    if (current.includes(carId)) {
+      persist({ ...snapshot, carIds: current.filter((id) => id !== carId), ready: true });
+    } else if (current.length < MAX_RACERS) {
+      persist({ ...snapshot, carIds: [...current, carId], ready: true });
+    }
   }, []);
 
-  const clear = useCallback(() => setIds([]), []);
+  const removeCar = useCallback((carId: string) => {
+    persist({ ...snapshot, carIds: snapshot.carIds.filter((id) => id !== carId), ready: true });
+  }, []);
+
+  const clearCars = useCallback(() => {
+    persist({ ...snapshot, carIds: [], ready: true });
+  }, []);
+
+  const setFilter = useCallback((next: CarFilter) => {
+    persist({ ...snapshot, filter: next, ready: true });
+  }, []);
+
+  const resetFilter = useCallback(() => {
+    persist({ ...snapshot, filter: EMPTY_FILTER, ready: true });
+  }, []);
 
   return {
-    selectedIds: ids,
-    isSelected: (carId: string) => ids.includes(carId),
-    toggle,
-    remove,
-    clear,
-    isFull: ids.length >= MAX_RACERS,
+    trackId,
+    selectedIds: carIds,
+    filter,
     ready,
+    isSelected: (carId: string) => carIds.includes(carId),
+    isFull: carIds.length >= MAX_RACERS,
+    setTrack,
+    toggleCar,
+    removeCar,
+    clearCars,
+    setFilter,
+    resetFilter,
   };
 }

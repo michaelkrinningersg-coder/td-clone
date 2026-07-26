@@ -36,10 +36,10 @@ export default function RootLayout({
                 🏁 Top Drives Clone
               </Link>
               <Link href="/" className="text-zinc-400 hover:text-white">
-                Marken
-              </Link>
-              <Link href="/tracks" className="text-zinc-400 hover:text-white">
                 Strecken
+              </Link>
+              <Link href="/cars" className="text-zinc-400 hover:text-white">
+                Autos
               </Link>
             </nav>
           </header>

@@ -2,7 +2,7 @@
 
 import type { CarData, StatRange, StatRanges } from "@/lib/data";
 import { raceColor } from "@/lib/race";
-import { useSelection } from "@/lib/selection";
+import { useSession } from "@/lib/selection";
 
 interface StatBarProps {
   label: string;
@@ -41,7 +41,7 @@ function StatBar({ label, value, range, unit, lowerIsBetter }: StatBarProps) {
 }
 
 export function CarCard({ car, statRanges }: { car: CarData; statRanges: StatRanges }) {
-  const { selectedIds, isSelected, toggle, isFull } = useSelection();
+  const { selectedIds, isSelected, toggleCar, isFull } = useSession();
   const selected = isSelected(car.id);
   const gridPosition = selectedIds.indexOf(car.id);
   const color = selected ? raceColor(gridPosition) : null;
@@ -50,7 +50,7 @@ export function CarCard({ car, statRanges }: { car: CarData; statRanges: StatRan
   return (
     <button
       type="button"
-      onClick={() => toggle(car.id)}
+      onClick={() => toggleCar(car.id)}
       disabled={blocked}
       aria-pressed={selected}
       className={`flex flex-col gap-3 rounded-xl border bg-zinc-900 p-4 text-left transition-colors ${
