@@ -7,6 +7,7 @@ import { brandColor } from "@/lib/brand-colors";
 import { formatDurationMs } from "@/lib/format";
 import { buildStandings, hasMixedTrackCounts, sortStandings, type StandingsOrder } from "@/lib/standings";
 import { timeStore, type TimeEntryData } from "@/lib/time-store";
+import { ResetButton } from "@/components/ResetButton";
 
 const PODIUM = ["text-amber-300", "text-zinc-300", "text-orange-400"];
 
@@ -33,6 +34,7 @@ const ORDERS: { id: StandingsOrder; label: string; hint: string }[] = [
 export function OverallStandings() {
   const [entries, setEntries] = useState<TimeEntryData[] | null>(null);
   const [order, setOrder] = useState<StandingsOrder>("points");
+  const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +48,7 @@ export function OverallStandings() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [nonce]);
 
   const standings = useMemo(() => (entries ? buildStandings(entries) : null), [entries]);
   const ordered = useMemo(
@@ -105,7 +107,21 @@ export function OverallStandings() {
             </button>
           ))}
         </div>
-        <p className="max-w-xl text-xs text-zinc-500">{activeHint}</p>
+        <p className="max-w-md text-xs text-zinc-500">{activeHint}</p>
+        <span className="ml-auto">
+          <ResetButton
+            label="Alle Ranglisten zurücksetzen"
+            question={`Alle ${entries!.length} Zeiten auf ${tracksWithTimes} ${
+              tracksWithTimes === 1 ? "Strecke" : "Strecken"
+            } löschen?`}
+            confirmLabel="Alles zurücksetzen"
+            onConfirm={async () => {
+              await timeStore.clear();
+              setEntries(null);
+              setNonce((n) => n + 1);
+            }}
+          />
+        </span>
       </div>
 
       {order === "time" && uneven && (

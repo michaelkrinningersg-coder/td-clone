@@ -62,13 +62,33 @@ export async function POST(req: Request) {
   });
 }
 
-/** Local-dev only, see the POST handler above. */
+/** Local-dev only, see the POST handler above. Drops a single entry (`id`), one
+ * track's board (`trackId`) or every time there is (`all=1`).
+ *
+ * Wiping everything needs the explicit `all=1`: a request that simply forgot
+ * its parameter is a bad request, not an instruction to empty the database. */
 export async function DELETE(req: Request) {
-  const id = new URL(req.url).searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "id ist erforderlich" }, { status: 400 });
+  const params = new URL(req.url).searchParams;
+  const id = params.get("id");
+  const trackId = params.get("trackId");
+  const all = params.get("all") === "1";
 
-  const deleted = await prisma.timeEntry.deleteMany({ where: { id } });
-  if (deleted.count === 0) return NextResponse.json({ error: "Eintrag nicht gefunden" }, { status: 404 });
+  if (id) {
+    const deleted = await prisma.timeEntry.deleteMany({ where: { id } });
+    if (deleted.count === 0) return NextResponse.json({ error: "Eintrag nicht gefunden" }, { status: 404 });
+    return NextResponse.json({ deleted: deleted.count });
+  }
 
-  return NextResponse.json({ deleted: deleted.count });
+  if (trackId) {
+    if (!getTrack(trackId)) return NextResponse.json({ error: "Strecke nicht gefunden" }, { status: 404 });
+    const deleted = await prisma.timeEntry.deleteMany({ where: { trackId } });
+    return NextResponse.json({ deleted: deleted.count });
+  }
+
+  if (all) {
+    const deleted = await prisma.timeEntry.deleteMany({});
+    return NextResponse.json({ deleted: deleted.count });
+  }
+
+  return NextResponse.json({ error: "id, trackId oder all=1 ist erforderlich" }, { status: 400 });
 }

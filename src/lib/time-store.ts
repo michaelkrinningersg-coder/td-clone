@@ -38,6 +38,9 @@ export interface TimeStore {
   /** Drops a single recorded time. Nothing else references an entry, so the
    * board simply re-ranks around the gap. */
   deleteEntry(entryId: string): Promise<void>;
+  /** Empties one track's board, or every board when no track is named.
+   * Returns how many times were dropped, so the UI can say what it did. */
+  clear(trackId?: string): Promise<number>;
 }
 
 const STORAGE_KEY = "td-clone:times";
@@ -56,7 +59,9 @@ function writeAll(entries: TimeEntryData[]) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
 }
 
-const localStorageStore: TimeStore = {
+/** The backend the Pages build uses. Exported so tests can drive it against a
+ * stubbed localStorage without having to fake a whole build mode. */
+export const browserTimeStore: TimeStore = {
   async saveRun(carId, trackId, timeMs) {
     const all = readAll();
     const index = all.findIndex((e) => e.trackId === trackId && e.carId === carId);
@@ -97,6 +102,13 @@ const localStorageStore: TimeStore = {
   async deleteEntry(entryId) {
     writeAll(readAll().filter((e) => e.id !== entryId));
   },
+
+  async clear(trackId) {
+    const all = readAll();
+    const kept = trackId === undefined ? [] : all.filter((e) => e.trackId !== trackId);
+    writeAll(kept);
+    return all.length - kept.length;
+  },
 };
 
 const apiStore: TimeStore = {
@@ -120,8 +132,17 @@ const apiStore: TimeStore = {
     const res = await fetch(`/api/runs?id=${encodeURIComponent(entryId)}`, { method: "DELETE" });
     if (!res.ok) throw new Error(`Löschen fehlgeschlagen: ${res.status}`);
   },
+
+  async clear(trackId) {
+    // `all=1` has to be explicit: a missing trackId must never be read as
+    // "wipe everything" by accident.
+    const query = trackId === undefined ? "all=1" : `trackId=${encodeURIComponent(trackId)}`;
+    const res = await fetch(`/api/runs?${query}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`Zurücksetzen fehlgeschlagen: ${res.status}`);
+    return ((await res.json()) as { deleted: number }).deleted;
+  },
 };
 
 export const isStaticBuild = process.env.NEXT_PUBLIC_STATIC_EXPORT === "1";
 
-export const timeStore: TimeStore = isStaticBuild ? localStorageStore : apiStore;
+export const timeStore: TimeStore = isStaticBuild ? browserTimeStore : apiStore;

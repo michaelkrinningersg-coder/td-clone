@@ -8,6 +8,7 @@ import { formatTimeMs } from "@/lib/format";
 import { useTrackTimes } from "@/lib/use-track-times";
 import { timeStore } from "@/lib/time-store";
 import { RankingRow } from "@/components/RankingRow";
+import { ResetButton } from "@/components/ResetButton";
 
 const PADDING = 20;
 
@@ -73,15 +74,28 @@ export function TrackLeaderboard({ track, highlight }: { track: TrackData; highl
         )}
       </header>
 
-      {entries !== null && entries.length > 3 && (
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Rangliste durchsuchen..."
-          aria-label="Rangliste durchsuchen"
-          className="mt-4 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-white placeholder:text-zinc-600 focus:border-emerald-600 focus:outline-none"
-        />
+      {entries !== null && entries.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          {entries.length > 3 && (
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Rangliste durchsuchen..."
+              aria-label="Rangliste durchsuchen"
+              className="min-w-56 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-white placeholder:text-zinc-600 focus:border-emerald-600 focus:outline-none"
+            />
+          )}
+          <ResetButton
+            label="Rangliste zurücksetzen"
+            question={`Alle ${entries.length} ${entries.length === 1 ? "Zeit" : "Zeiten"} auf ${track.name} löschen?`}
+            confirmLabel="Zurücksetzen"
+            onConfirm={async () => {
+              await timeStore.clear(track.id);
+              reload();
+            }}
+          />
+        </div>
       )}
 
       {rows === null ? (
