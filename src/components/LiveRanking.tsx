@@ -146,28 +146,47 @@ function OverallView({ ranked, track, savedAt }: { ranked: RankedRacer[]; track:
     return <p className="px-4 py-6 text-sm text-zinc-500">Noch keine Zeiten auf dieser Strecke.</p>;
   }
 
+  // Where each car sits on the whole board, so a finished car can report its
+  // standing against every time ever set here rather than only against the
+  // handful it just raced.
+  const overallPositionOf = new Map(entries.map((entry, i) => [entry.carId, i + 1]));
+
   return (
-    <div className="max-h-[28rem] overflow-y-auto">
+    <div className="max-h-[44rem] overflow-y-auto">
       {/* The cars in this race stay pinned at the top in their current running
           order, so they never scroll out of sight - while still appearing in
           their real place in the board below once they have a time. */}
       {ranked.length > 0 && (
         <div className="sticky top-0 z-10 border-b border-zinc-700 bg-zinc-950/95 backdrop-blur">
           <div className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-            Dieses Rennen
+            Dieses Rennen{" "}
+            <span className="normal-case tracking-normal text-zinc-600">
+              · Platz {ranked.some((r) => r.finished) ? "gesamt" : "im Rennen"}
+            </span>
           </div>
           <ol className="flex flex-col gap-px bg-zinc-800">
-            {ranked.map((racer) => (
-              <RankingRow
-                key={`pinned-${racer.carId}`}
-                car={getCar(racer.carId)}
-                fallbackName={racer.carId}
-                gridIndex={racer.gridIndex}
-                position={racer.position}
-                time={formatTimeMs(racer.elapsedMs)}
-                note={racer.finished ? formatGap(racer) : `${racer.speedKph.toFixed(0)} km/h`}
-              />
-            ))}
+            {ranked.map((racer) => {
+              const overall = overallPositionOf.get(racer.carId);
+              return (
+                <RankingRow
+                  key={`pinned-${racer.carId}`}
+                  car={getCar(racer.carId)}
+                  fallbackName={racer.carId}
+                  gridIndex={racer.gridIndex}
+                  // While driving, the place in this race; once home, the place
+                  // it has taken on the overall board.
+                  position={racer.finished ? (overall ?? racer.position) : racer.position}
+                  time={formatTimeMs(racer.elapsedMs)}
+                  note={
+                    racer.finished
+                      ? best !== undefined && racer.totalTimeMs > best
+                        ? `+${((racer.totalTimeMs - best) / 1000).toFixed(2)}s`
+                        : "Bestzeit"
+                      : `${racer.speedKph.toFixed(0)} km/h`
+                  }
+                />
+              );
+            })}
           </ol>
         </div>
       )}
