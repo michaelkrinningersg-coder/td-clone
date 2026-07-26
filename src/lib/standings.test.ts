@@ -9,40 +9,39 @@ function entry(carId: string, trackId: string, timeMs: number): TimeEntryData {
 }
 
 describe("pointsForPosition", () => {
-  it("drops steeply over the first places", () => {
-    assert.equal(pointsForPosition(1), 2500);
-    assert.equal(pointsForPosition(2), 1800);
-    assert.equal(pointsForPosition(3), 1500);
-    assert.equal(pointsForPosition(10), 100);
+  it("starts at 5000 for the win", () => {
+    assert.equal(pointsForPosition(1), 5000);
+    assert.equal(pointsForPosition(2), 4999);
+    assert.equal(pointsForPosition(3), 4998);
   });
 
-  it("pays more for gaining a place at the front than at the back", () => {
+  it("is worth the same one point wherever a place is gained", () => {
     const front = pointsForPosition(1) - pointsForPosition(2);
-    const back = pointsForPosition(9) - pointsForPosition(10);
-    const tail = pointsForPosition(100) - pointsForPosition(101);
-    assert.ok(front > back, `${front} should beat ${back}`);
-    assert.ok(back > tail, `${back} should beat ${tail}`);
+    const middle = pointsForPosition(500) - pointsForPosition(501);
+    const back = pointsForPosition(4000) - pointsForPosition(4001);
+    assert.equal(front, 1);
+    assert.equal(middle, 1);
+    assert.equal(back, 1);
   });
 
-  it("scores down to the 2500th place and no further", () => {
-    assert.equal(pointsForPosition(11), 99);
-    assert.equal(pointsForPosition(2500), 1);
-    assert.equal(pointsForPosition(2501), 0);
+  it("scores down to the 5000th place and no further", () => {
+    assert.equal(pointsForPosition(4999), 2);
+    assert.equal(pointsForPosition(5000), 1);
+    assert.equal(pointsForPosition(5001), 0);
     assert.equal(pointsForPosition(20_000), 0);
   });
 
   it("never goes up as the position gets worse", () => {
     let previous = Infinity;
-    for (let position = 1; position <= 2600; position++) {
+    for (let position = 1; position <= 5100; position++) {
       const points = pointsForPosition(position);
       assert.ok(points <= previous, `position ${position} scores more than ${position - 1}`);
       previous = points;
     }
   });
 
-  it("falls in a straight line behind the top ten", () => {
-    // Halfway through the tail should be about halfway between 99 and 1.
-    assert.ok(Math.abs(pointsForPosition(1255) - 50) <= 1);
+  it("halves by the middle of the field", () => {
+    assert.equal(pointsForPosition(2500), 2501);
   });
 
   it("ignores a position that does not exist", () => {
@@ -65,8 +64,8 @@ describe("buildStandings", () => {
     ]);
     // Both won once and came second once.
     assert.equal(standings.length, 2);
-    assert.equal(standings[0].points, 2500 + 1800);
-    assert.equal(standings[1].points, 2500 + 1800);
+    assert.equal(standings[0].points, 5000 + 4999);
+    assert.equal(standings[1].points, 5000 + 4999);
     for (const s of standings) {
       assert.equal(s.raced, 2);
       assert.equal(s.wins, 1);
@@ -83,8 +82,8 @@ describe("buildStandings", () => {
     ]);
     const sprinter = standings.find((s) => s.carId === "sprinter")!;
     const allrounder = standings.find((s) => s.carId === "allrounder")!;
-    assert.equal(sprinter.points, 2500);
-    assert.equal(allrounder.points, 1800 + 2500); // second, then a win elsewhere
+    assert.equal(sprinter.points, 5000);
+    assert.equal(allrounder.points, 4999 + 5000); // second, then a win elsewhere
     assert.equal(standings[0].carId, "allrounder");
   });
 

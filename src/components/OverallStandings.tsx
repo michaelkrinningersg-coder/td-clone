@@ -15,7 +15,7 @@ const ORDERS: { id: StandingsOrder; label: string; hint: string }[] = [
   {
     id: "points",
     label: "Punkte",
-    hint: "Punkte je Platzierung pro Strecke, bis Platz 2500. Wer überall vorne liegt, gewinnt — nicht wer eine kurze Strecke beherrscht.",
+    hint: "Punkte je Platzierung pro Strecke: der Sieg 5000, jeder Platz dahinter einen weniger, bis Platz 5000. Wer überall vorne liegt, gewinnt — nicht wer eine kurze Strecke beherrscht.",
   },
   {
     id: "gap",

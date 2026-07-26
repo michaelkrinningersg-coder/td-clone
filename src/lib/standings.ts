@@ -28,25 +28,18 @@ export interface CarStanding {
  * seconds. */
 export type StandingsOrder = "points" | "gap" | "time";
 
-/** The first ten places keep the shape a racing series uses - a steep drop, so
- * a win is worth far more than turning up - scaled by 100 to leave room below. */
-const TOP_TEN = [2500, 1800, 1500, 1200, 1000, 800, 600, 400, 200, 100];
-/** From eleventh place the score falls in a straight line to a single point at
- * the last scoring place; past that a car scores nothing. */
-const LAST_SCORING_POSITION = 2500;
-const TAIL_START_POINTS = 99;
-
-/** Points for a placing.
+/** Points run in a straight line from the win down to nothing: the first place
+ * scores 5000, every place after it exactly one less, and the 5000th still
+ * takes a point home. Past that a car scores nothing.
  *
- * Whole points mean the tail moves in plateaus - 2490 places share 99 points,
- * so roughly every 25th place is worth one less. That only blurs cars hundreds
- * of places apart, which the mean gap column separates anyway. */
+ * Every place is therefore worth the same one point, wherever it is won - a
+ * car that climbs from 900th to 899th gains as much as one that takes a win off
+ * the leader. */
+const LAST_SCORING_POSITION = 5000;
+
 export function pointsForPosition(position: number): number {
   if (position < 1 || position > LAST_SCORING_POSITION) return 0;
-  if (position <= TOP_TEN.length) return TOP_TEN[position - 1];
-  const places = LAST_SCORING_POSITION - TOP_TEN.length - 1;
-  const step = (TAIL_START_POINTS - 1) / places;
-  return Math.round(TAIL_START_POINTS - (position - TOP_TEN.length - 1) * step);
+  return LAST_SCORING_POSITION + 1 - position;
 }
 
 /** Builds the standings from every recorded time, grouped by track. */
