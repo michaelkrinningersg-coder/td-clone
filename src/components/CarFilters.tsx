@@ -4,6 +4,7 @@ import { useState } from "react";
 import { activeFilterCount, type CarFilter, type Range } from "@/lib/filters";
 import { statRanges } from "@/lib/data";
 import type { Drivetrain } from "@/lib/physics";
+import { carClasses, classRangeLabel, getCarClass } from "@/lib/classes";
 
 const DRIVETRAINS: Drivetrain[] = ["FWD", "RWD", "AWD"];
 
@@ -80,7 +81,22 @@ export function CarFilters({
             bounds={statRanges.year}
             onChange={(year) => onChange({ ...filter, year })}
           />
+          <RangeInput
+            label="Leistungsgewicht (kg/PS)"
+            range={filter.powerToWeight}
+            bounds={statRanges.powerToWeight}
+            step={0.1}
+            onChange={(powerToWeight) => onChange({ ...filter, powerToWeight })}
+          />
 
+          <ChipGroup
+            label="Klasse"
+            options={carClasses.map((c) => c.id)}
+            optionLabel={(id) => getCarClass(id)!.name}
+            optionTitle={(id) => classRangeLabel(getCarClass(id)!)}
+            selected={filter.classes}
+            onChange={(classes) => onChange({ ...filter, classes })}
+          />
           <ChipGroup
             label="Antrieb"
             options={DRIVETRAINS}
@@ -167,11 +183,16 @@ function RangeInput({
 function ChipGroup({
   label,
   options,
+  optionLabel,
+  optionTitle,
   selected,
   onChange,
 }: {
   label: string;
   options: readonly string[];
+  /** The chip's text, when it should differ from the stored value. */
+  optionLabel?: (option: string) => string;
+  optionTitle?: (option: string) => string;
   selected: string[];
   onChange: (next: string[]) => void;
 }) {
@@ -186,13 +207,14 @@ function ChipGroup({
               key={option}
               onClick={() => onChange(active ? selected.filter((o) => o !== option) : [...selected, option])}
               aria-pressed={active}
+              title={optionTitle?.(option)}
               className={`rounded-full border px-3 py-1 text-xs ${
                 active
                   ? "border-emerald-500 bg-emerald-500/15 text-emerald-300"
                   : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
               }`}
             >
-              {option}
+              {optionLabel?.(option) ?? option}
             </button>
           );
         })}

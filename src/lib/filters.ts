@@ -1,5 +1,6 @@
 import type { CarData } from "@/lib/data";
 import type { Drivetrain } from "@/lib/physics";
+import { carClassOf, powerToWeight } from "@/lib/classes";
 
 /** A bound of `null` means "no limit on this side", so a filter can be open at
  * one end without inventing a number. */
@@ -10,6 +11,10 @@ export interface CarFilter {
   topSpeedKph: Range;
   accel0to100s: Range;
   year: Range;
+  /** Kilograms per horsepower. */
+  powerToWeight: Range;
+  /** Class ids; empty means "any", like the other tick lists. */
+  classes: string[];
   /** Empty means "any" rather than "none" - an empty set of ticks is the
    * unfiltered state, which is what an untouched filter panel shows. */
   drivetrains: Drivetrain[];
@@ -25,6 +30,8 @@ export const EMPTY_FILTER: CarFilter = {
   topSpeedKph: EMPTY_RANGE,
   accel0to100s: EMPTY_RANGE,
   year: EMPTY_RANGE,
+  powerToWeight: EMPTY_RANGE,
+  classes: [],
   drivetrains: [],
   fuelTypes: [],
   onlyWithoutTime: false,
@@ -43,6 +50,8 @@ export function matchesFilter(car: CarData, filter: CarFilter, timedCarIds?: Rea
   if (!inRange(car.topSpeedKph, filter.topSpeedKph)) return false;
   if (!inRange(car.accel0to100s, filter.accel0to100s)) return false;
   if (!inRange(car.year, filter.year)) return false;
+  if (!inRange(powerToWeight(car), filter.powerToWeight)) return false;
+  if (filter.classes.length > 0 && !filter.classes.includes(carClassOf(car).id)) return false;
   if (filter.drivetrains.length > 0 && !filter.drivetrains.includes(car.drivetrain)) return false;
   if (filter.fuelTypes.length > 0 && !filter.fuelTypes.includes(car.fuelType)) return false;
   if (filter.onlyWithoutTime && timedCarIds?.has(car.id)) return false;
@@ -59,6 +68,9 @@ export function isFilterActive(filter: CarFilter): boolean {
     filter.accel0to100s.max !== null ||
     filter.year.min !== null ||
     filter.year.max !== null ||
+    filter.powerToWeight.min !== null ||
+    filter.powerToWeight.max !== null ||
+    filter.classes.length > 0 ||
     filter.drivetrains.length > 0 ||
     filter.fuelTypes.length > 0 ||
     filter.onlyWithoutTime
@@ -68,9 +80,16 @@ export function isFilterActive(filter: CarFilter): boolean {
 /** Number of individual criteria in use, for the badge on the filter toggle. */
 export function activeFilterCount(filter: CarFilter): number {
   let n = 0;
-  for (const range of [filter.powerPs, filter.topSpeedKph, filter.accel0to100s, filter.year]) {
+  for (const range of [
+    filter.powerPs,
+    filter.topSpeedKph,
+    filter.accel0to100s,
+    filter.year,
+    filter.powerToWeight,
+  ]) {
     if (range.min !== null || range.max !== null) n++;
   }
+  if (filter.classes.length > 0) n++;
   if (filter.drivetrains.length > 0) n++;
   if (filter.fuelTypes.length > 0) n++;
   if (filter.onlyWithoutTime) n++;

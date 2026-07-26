@@ -4,6 +4,7 @@ import type { CarData, StatRange, StatRanges } from "@/lib/data";
 import { raceColor } from "@/lib/race";
 import { brandColor } from "@/lib/brand-colors";
 import { useSession } from "@/lib/selection";
+import { carClassOf, classRangeLabel, powerToWeight } from "@/lib/classes";
 
 interface StatBarProps {
   label: string;
@@ -47,6 +48,7 @@ export function CarCard({ car, statRanges }: { car: CarData; statRanges: StatRan
   const gridPosition = selectedIds.indexOf(car.id);
   const color = selected ? raceColor(gridPosition) : null;
   const blocked = isFull && !selected;
+  const carClass = carClassOf(car);
 
   return (
     <button
@@ -74,7 +76,13 @@ export function CarCard({ car, statRanges }: { car: CarData; statRanges: StatRan
           <div className="truncate text-xs text-zinc-400" title={car.variant}>
             {car.variant}
           </div>
-          <div className="mt-1 flex gap-2 text-xs text-zinc-500">
+          <div className="mt-1 flex flex-wrap gap-2 text-xs text-zinc-500">
+            <span
+              className={`rounded bg-zinc-800 px-1.5 py-0.5 font-medium ${carClass.color}`}
+              title={classRangeLabel(carClass)}
+            >
+              {carClass.name}
+            </span>
             <span className="rounded bg-zinc-800 px-1.5 py-0.5">{car.drivetrain}</span>
             <span className="rounded bg-zinc-800 px-1.5 py-0.5">{car.fuelType}</span>
           </div>
@@ -95,6 +103,13 @@ export function CarCard({ car, statRanges }: { car: CarData; statRanges: StatRan
         <StatBar label="Leistung" value={car.powerPs} range={statRanges.powerPs} unit=" PS" />
         <StatBar label="Drehmoment" value={car.torqueNm} range={statRanges.torqueNm} unit=" Nm" />
         <StatBar label="Gewicht" value={car.weightKg} range={statRanges.weightKg} unit=" kg" lowerIsBetter />
+        <StatBar
+          label="kg/PS"
+          value={Math.round(powerToWeight(car) * 10) / 10}
+          range={statRanges.powerToWeight}
+          unit=""
+          lowerIsBetter
+        />
       </div>
     </button>
   );

@@ -101,6 +101,31 @@ describe("matchesFilter", () => {
   });
 });
 
+// The S4 is 1710 kg on 344 PS, so 4.97 kg/PS - Supersport, just under the
+// 5 kg/PS boundary to Sport.
+describe("power-to-weight and class", () => {
+  it("keeps a car inside the kg/PS window", () => {
+    assert.equal(matchesFilter(car, filter({ powerToWeight: { min: 4, max: 6 } })), true);
+  });
+
+  it("drops a car outside the kg/PS window", () => {
+    assert.equal(matchesFilter(car, filter({ powerToWeight: { min: 6, max: null } })), false);
+    assert.equal(matchesFilter(car, filter({ powerToWeight: { min: null, max: 4 } })), false);
+  });
+
+  it("keeps a car whose class is ticked", () => {
+    assert.equal(matchesFilter(car, filter({ classes: ["supersport"] })), true);
+  });
+
+  it("drops a car whose class is not ticked", () => {
+    assert.equal(matchesFilter(car, filter({ classes: ["hyper", "sport"] })), false);
+  });
+
+  it("treats no ticked class as any class", () => {
+    assert.equal(matchesFilter(car, filter({ classes: [] })), true);
+  });
+});
+
 describe("isFilterActive and activeFilterCount", () => {
   it("report an untouched filter as inactive", () => {
     assert.equal(isFilterActive(EMPTY_FILTER), false);
@@ -121,5 +146,11 @@ describe("isFilterActive and activeFilterCount", () => {
     });
     assert.equal(isFilterActive(f), true);
     assert.equal(activeFilterCount(f), 4);
+  });
+
+  it("count the kg/PS range and the class list too", () => {
+    const f = filter({ powerToWeight: { min: 4, max: 6 }, classes: ["sport"] });
+    assert.equal(isFilterActive(f), true);
+    assert.equal(activeFilterCount(f), 2);
   });
 });

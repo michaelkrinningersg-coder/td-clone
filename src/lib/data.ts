@@ -130,6 +130,7 @@ export const statRanges = {
   torqueNm: rangeOf((c) => c.torqueNm),
   accel0to100s: rangeOf((c) => c.accel0to100s),
   year: rangeOf((c) => c.year),
+  powerToWeight: rangeOf((c) => c.weightKg / c.powerPs),
 };
 
 /** Every fuel type present, so the filter offers exactly what exists. */

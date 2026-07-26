@@ -3,6 +3,7 @@
 import { useDeferredValue, useMemo, useState } from "react";
 import { statRanges, type CarData } from "@/lib/data";
 import { CarCard } from "@/components/CarCard";
+import { powerToWeight } from "@/lib/classes";
 
 /** How many cards to render at once. A single marque can hold hundreds of cars
  * and the global search spans thousands, so the list grows on demand. */
@@ -13,6 +14,10 @@ const SORTS = {
   topSpeedKph: { label: "Top-Speed", compare: (a: CarData, b: CarData) => b.topSpeedKph - a.topSpeedKph },
   accel0to100s: { label: "0-100", compare: (a: CarData, b: CarData) => a.accel0to100s - b.accel0to100s },
   weightKg: { label: "Gewicht", compare: (a: CarData, b: CarData) => a.weightKg - b.weightKg },
+  powerToWeight: {
+    label: "Leistungsgewicht",
+    compare: (a: CarData, b: CarData) => powerToWeight(a) - powerToWeight(b),
+  },
   year: { label: "Baujahr", compare: (a: CarData, b: CarData) => b.year - a.year },
   name: {
     label: "Name",
