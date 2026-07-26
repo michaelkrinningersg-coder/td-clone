@@ -1,7 +1,16 @@
-import { pointsForPosition } from "@/lib/standings";
-
 /** How many cars make up a championship field. */
 export const CHAMPIONSHIP_SIZE = 30;
+
+/** Points for a placing in a championship round.
+ *
+ * A scale of its own, not the one the leaderboards use: a field of thirty
+ * scores thirty down to one, so a place gained is a point and the whole field
+ * fits in numbers anyone can hold in their head. The top score follows the
+ * field, which keeps the last car on one point whatever the size. */
+export function championshipPoints(position: number, fieldSize: number): number {
+  if (position < 1 || position > fieldSize) return 0;
+  return fieldSize + 1 - position;
+}
 
 /** How many run in one heat. A field of thirty on a single map is unreadable,
  * so a round is broken into heats and the track result is assembled from all of
@@ -84,7 +93,7 @@ export function championshipStandings(
       const standing = totals.get(result.carId);
       if (!standing) return; // a car that is not in this championship
       const position = index + 1;
-      standing.points += pointsForPosition(position);
+      standing.points += championshipPoints(position, ranked.length);
       standing.rounds += 1;
       if (position === 1) standing.wins += 1;
       if (position <= 3) standing.podiums += 1;
@@ -109,15 +118,35 @@ export function currentTrackId(state: ChampionshipState): string | null {
   return state.trackIds[state.rounds.length] ?? null;
 }
 
-/** The cars of the heat coming up, ordered so the leaders meet each other:
- * before the first round the grid order stands, afterwards the championship
- * table decides. */
+/** The order the field is broken into heats in.
+ *
+ * Before the first round there is nothing to go on, so the grid order stands.
+ * Afterwards the table decides, worst placed first: the opening heat is the
+ * back of the championship and the last one is the top six fighting for it,
+ * which is the way round that keeps the day building to something. */
+export function heatOrder(state: ChampionshipState): string[] {
+  if (state.rounds.length === 0) return state.carIds;
+  return championshipStandings(state.carIds, state.rounds)
+    .map((s) => s.carId)
+    .reverse();
+}
+
+/** The cars of the heat coming up. */
 export function currentHeat(state: ChampionshipState): string[] {
-  const order =
-    state.rounds.length === 0
-      ? state.carIds
-      : championshipStandings(state.carIds, state.rounds).map((s) => s.carId);
-  return splitIntoHeats(order)[state.heatIndex] ?? [];
+  return splitIntoHeats(heatOrder(state))[state.heatIndex] ?? [];
+}
+
+/** The championship positions the heat coming up is made of, e.g. "30.–25.".
+ * Null before the first round, when the heats follow the grid instead. */
+export function currentHeatPositions(state: ChampionshipState): { from: number; to: number } | null {
+  if (state.rounds.length === 0) return null;
+  const order = heatOrder(state);
+  const heats = splitIntoHeats(order);
+  const heat = heats[state.heatIndex];
+  if (!heat) return null;
+  // heatOrder runs backwards, so the first car of a heat is the worst placed.
+  const firstIndex = heats.slice(0, state.heatIndex).reduce((n, h) => n + h.length, 0);
+  return { from: order.length - firstIndex, to: order.length - firstIndex - heat.length + 1 };
 }
 
 export function heatCount(state: ChampionshipState): number {

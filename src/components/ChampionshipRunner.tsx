@@ -8,6 +8,7 @@ import { raceColor } from "@/lib/race";
 import {
   championshipStandings,
   currentHeat,
+  currentHeatPositions,
   currentTrackId,
   heatCount,
   isFinished,
@@ -46,6 +47,7 @@ export function ChampionshipRunner({
     .filter((c) => c !== undefined);
   const heats = heatCount(state);
   const done = isFinished(state);
+  const positions = currentHeatPositions(state);
 
   return (
     <div className="mt-6 flex flex-col gap-8">
@@ -57,6 +59,14 @@ export function ChampionshipRunner({
             </h2>
             <span className="text-sm text-zinc-400">
               Rennen {state.heatIndex + 1} von {heats} · {heatCars.length} Autos
+              {positions && (
+                <>
+                  {" · "}
+                  <span className="text-zinc-300">
+                    Plätze {positions.from}.–{positions.to}.
+                  </span>
+                </>
+              )}
             </span>
           </div>
 
@@ -122,10 +132,10 @@ export function ChampionshipRunner({
         <h2 className="text-lg font-bold text-white">Meisterschaftsstand</h2>
         <p className="mt-1 text-sm text-zinc-400">
           {state.rounds.length === 0
-            ? "Noch kein Lauf gewertet."
+            ? `Noch kein Lauf gewertet. Punkte je Lauf: ${state.carIds.length} für den Sieg, jeder Platz dahinter einen weniger, der letzte bekommt 1.`
             : `Nach ${state.rounds.length} von ${state.trackIds.length} ${
                 state.trackIds.length === 1 ? "Lauf" : "Läufen"
-              }.`}
+              }. Gewertet wird über das ganze Feld: ${state.carIds.length} Punkte für den Sieg, 1 für den letzten Platz.`}
         </p>
 
         <div className="mt-3 overflow-x-auto rounded-xl border border-zinc-800">

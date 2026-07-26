@@ -62,8 +62,9 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
           1. Feld — {field.length} von {CHAMPIONSHIP_SIZE} Autos
         </h2>
         <p className="mt-1 text-sm text-zinc-400">
-          Ein Auto suchen und daraus ein Feld bauen, oder Auto für Auto hinzufügen. Gefahren wird in Läufen zu
-          je {HEAT_SIZE} Autos; gewertet wird danach über das ganze Feld.
+          Ein Auto suchen und daraus ein Feld bauen, oder Auto für Auto hinzufügen. Gefahren wird in Rennen zu
+          je {HEAT_SIZE} Autos; gewertet wird danach über das ganze Feld — der Sieger eines Laufs bekommt so
+          viele Punkte, wie Autos im Feld stehen, der letzte einen.
         </p>
 
         <input
@@ -169,8 +170,8 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
       <section>
         <h2 className="text-lg font-bold text-white">2. Kalender — {calendar.length} Läufe</h2>
         <p className="mt-1 text-sm text-zinc-400">
-          Reihenfolge mit den Pfeilen ändern. Nach jedem Lauf werden die Punkte vergeben, ab dem zweiten
-          fahren die Führenden gemeinsam.
+          Reihenfolge mit den Pfeilen ändern. Ab dem zweiten Lauf bestimmt die Tabelle die Rennen: zuerst
+          fährt das Ende des Feldes gegeneinander, im letzten Rennen die Spitze.
         </p>
 
         <ol className="mt-3 flex flex-col gap-px overflow-hidden rounded-xl bg-zinc-800">

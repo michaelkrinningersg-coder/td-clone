@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  championshipPoints,
   championshipStandings,
+  currentHeatPositions,
   currentHeat,
   currentTrackId,
   heatCount,
@@ -38,6 +40,30 @@ describe("splitIntoHeats", () => {
   });
 });
 
+describe("championshipPoints", () => {
+  it("runs from the field size down to a single point", () => {
+    assert.equal(championshipPoints(1, 30), 30);
+    assert.equal(championshipPoints(2, 30), 29);
+    assert.equal(championshipPoints(29, 30), 2);
+    assert.equal(championshipPoints(30, 30), 1);
+  });
+
+  it("is worth one point per place, wherever it is gained", () => {
+    assert.equal(championshipPoints(4, 30) - championshipPoints(5, 30), 1);
+    assert.equal(championshipPoints(24, 30) - championshipPoints(25, 30), 1);
+  });
+
+  it("follows a smaller field so the last car still scores", () => {
+    assert.equal(championshipPoints(1, 6), 6);
+    assert.equal(championshipPoints(6, 6), 1);
+  });
+
+  it("scores nothing for a place outside the field", () => {
+    assert.equal(championshipPoints(31, 30), 0);
+    assert.equal(championshipPoints(0, 30), 0);
+  });
+});
+
 describe("championshipStandings", () => {
   it("scores a round across the whole field, not per heat", () => {
     // Two heats. The slowest car of heat one is still quicker than the
@@ -59,8 +85,8 @@ describe("championshipStandings", () => {
       standings.map((s) => s.carId),
       ["a", "b", "c", "d"],
     );
-    assert.equal(standings[0].points, 5000);
-    assert.equal(standings[3].points, 4997);
+    assert.equal(standings[0].points, 4);
+    assert.equal(standings[3].points, 1);
   });
 
   it("lists every car, including one that has not run yet", () => {
@@ -108,8 +134,8 @@ describe("championshipStandings", () => {
       [{ trackId: "t1", results: [{ carId: "a", timeMs: 100 }, { carId: "ghost", timeMs: 50 }] }],
     );
     assert.equal(standings.length, 1);
-    // The ghost took first place, so the real car scored second.
-    assert.equal(standings[0].points, 4999);
+    // The ghost took first place, so the real car scored second of two.
+    assert.equal(standings[0].points, 1);
   });
 });
 
@@ -150,17 +176,59 @@ describe("running a championship", () => {
     assert.equal(currentTrackId(state), null);
   });
 
-  it("sends the leaders out together after the first round", () => {
-    let state = newChampionship(field, ["t1", "t2"]);
-    // Drive round one so the last car on the grid ends up quickest overall.
-    for (let heat = 0; heat < 5; heat++) {
-      const cars = currentHeat(state);
-      state = recordHeat(
-        state,
-        cars.map((carId) => ({ carId, timeMs: carId === "car30" ? 1 : 1000 + field.indexOf(carId) })),
+  /** Drives a whole round, making each car's time follow the order given so the
+   * resulting championship table is known exactly. */
+  function driveRound(state: ChampionshipState, order: readonly string[]): ChampionshipState {
+    let next = state;
+    const heats = heatCount(next);
+    for (let heat = 0; heat < heats; heat++) {
+      next = recordHeat(
+        next,
+        currentHeat(next).map((carId) => ({ carId, timeMs: 1000 + order.indexOf(carId) })),
       );
     }
-    assert.equal(currentHeat(state)[0], "car30");
+    return next;
+  }
+
+  it("opens the next round with the back of the field and closes it with the top", () => {
+    // Round one leaves car1 leading and car30 last.
+    let state = driveRound(newChampionship(field, ["t1", "t2"]), field);
+
+    const standings = championshipStandings(state.carIds, state.rounds).map((s) => s.carId);
+    assert.deepEqual(standings, field, "round one should rank the cars in grid order");
+
+    // First heat of round two: the last six of the table, worst first.
+    assert.deepEqual(currentHeat(state), ["car30", "car29", "car28", "car27", "car26", "car25"]);
+    assert.deepEqual(currentHeatPositions(state), { from: 30, to: 25 });
+
+    // Walk to the final heat: the top six, sixth down to the leader.
+    for (let heat = 0; heat < 4; heat++) {
+      state = recordHeat(
+        state,
+        currentHeat(state).map((carId) => ({ carId, timeMs: 2000 + field.indexOf(carId) })),
+      );
+    }
+    assert.deepEqual(currentHeat(state), ["car6", "car5", "car4", "car3", "car2", "car1"]);
+    assert.deepEqual(currentHeatPositions(state), { from: 6, to: 1 });
+  });
+
+  it("follows the grid in the first round, with no positions to show yet", () => {
+    const state = newChampionship(field, ["t1"]);
+    assert.deepEqual(currentHeat(state), field.slice(0, 6));
+    assert.equal(currentHeatPositions(state), null);
+  });
+
+  it("puts the short heat at the front, so the leaders still finish the round", () => {
+    const small = field.slice(0, 8); // 8 cars -> heats of 6 and 2
+    const state = driveRound(newChampionship(small, ["t1", "t2"]), small);
+    assert.deepEqual(currentHeat(state), ["car8", "car7", "car6", "car5", "car4", "car3"]);
+    assert.deepEqual(currentHeatPositions(state), { from: 8, to: 3 });
+    const last = recordHeat(
+      state,
+      currentHeat(state).map((carId) => ({ carId, timeMs: 2000 })),
+    );
+    assert.deepEqual(currentHeat(last), ["car2", "car1"]);
+    assert.deepEqual(currentHeatPositions(last), { from: 2, to: 1 });
   });
 
   it("does nothing when a heat is filed after the calendar is over", () => {
