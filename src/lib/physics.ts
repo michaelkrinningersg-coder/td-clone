@@ -87,14 +87,180 @@ export function wheelPowerW(car: CarPhysicsInput): number {
   return car.powerPs * PS_TO_WATT * DRIVETRAIN_EFFICIENCY;
 }
 
-/** How fast the car would go with drag as the only thing stopping it. */
-export function dragLimitedTopSpeedMps(car: CarPhysicsInput): number {
+/** Torque at the power peak, as a share of peak torque.
+ *
+ * Where both figures are quoted for a real engine this ratio sits just under
+ * one, remarkably consistently: a Chiron makes 1573 of its 1600 Nm at the power
+ * peak, an S2000 203 of 208, a Golf GTD 344 of 350. */
+const TORQUE_AT_POWER_PEAK = 0.98;
+
+/** Engine speed at the redline, relative to the power peak. */
+const REDLINE_FRACTION = 1.1;
+
+/** Where in the rev range peak torque sits, and how much of it is there just
+ * off idle - for the two ends of the field. A low-revving engine is broad: it
+ * pulls almost from idle and peaks early. A high-revving one has to be kept
+ * spinning and rewards it by holding on past the power peak. */
+const BROAD = { offIdle: 0.9, peakAt: 0.45, fadePastPeak: 0.35 };
+const PEAKY = { offIdle: 0.55, peakAt: 0.7, fadePastPeak: 0.15 };
+
+/** Where a car sits between the two, from its rated speed: 0 at 3.000/min,
+ * 1 at 8.000/min. This is the whole reason torque is in the model - power and
+ * top speed alone cannot tell a turbodiesel from an atmospheric screamer. */
+function revviness(car: CarPhysicsInput): number {
+  const rpm = (ratedSpeedRadS(car) * 60) / (2 * Math.PI);
+  return Math.max(0, Math.min(1, (rpm - 3000) / 5000));
+}
+
+function curveShape(car: CarPhysicsInput) {
+  const r = revviness(car);
+  const mix = (a: number, b: number) => a + (b - a) * r;
+  return {
+    offIdle: mix(BROAD.offIdle, PEAKY.offIdle),
+    peakAt: mix(BROAD.peakAt, PEAKY.peakAt),
+    fadePastPeak: mix(BROAD.fadePastPeak, PEAKY.fadePastPeak),
+  };
+}
+
+/** Ratio between the speeds top gear and first gear are good for. Four and a
+ * half is ordinary; the gear count decides how finely it is divided. */
+const GEARBOX_SPREAD = 4.5;
+
+/** Where the engine makes its rated power, in rad/s.
+ *
+ * The dataset has no engine speeds, but power and torque together imply one:
+ * P = M · omega. Solving it for a peak-torque figure that holds nearly to the
+ * power peak lands close to the real number across the field - a Golf GTD at
+ * ~3.700/min, a Golf GTI at ~4.600, an S2000 at ~8.100, a Chiron at ~6.600 -
+ * and it separates a torquey diesel from a high-revving atmospheric engine
+ * without a single invented per-car value.
+ *
+ * Clamped either side because the dataset does contain the odd implausible
+ * torque figure, and a nonsense engine speed would poison the gearing. */
+export function ratedSpeedRadS(car: CarPhysicsInput): number {
+  const raw = (car.powerPs * PS_TO_WATT) / (TORQUE_AT_POWER_PEAK * car.torqueNm);
+  return Math.max(210, Math.min(1000, raw)); // ~2.000 to ~9.550 /min
+}
+
+/** Engine torque at a given speed, as a share of the peak.
+ *
+ * Torque climbs off idle, peaks, holds to the power peak - it has to, or the
+ * car would not make its rated power there - and falls away past it. How much
+ * is there off idle, how early it peaks and how hard it fades are what separate
+ * a broad turbodiesel from a peaky atmospheric engine.
+ *
+ * That difference is not cosmetic. Gearing follows the rated speed, so two cars
+ * with the same power, top speed and gear count sit at the same point on their
+ * curves at any given speed; if the curves had the same shape they would be
+ * indistinguishable. The shape is where the torque figure earns its keep. */
+export function torqueFactor(car: CarPhysicsInput, radS: number): number {
+  const shape = curveShape(car);
+  const x = radS / ratedSpeedRadS(car);
+  if (x <= 0) return shape.offIdle;
+  if (x <= shape.peakAt) {
+    return shape.offIdle + (x / shape.peakAt) * (1 - shape.offIdle);
+  }
+  if (x <= 1) {
+    const t = (x - shape.peakAt) / (1 - shape.peakAt);
+    return 1 - t * (1 - TORQUE_AT_POWER_PEAK);
+  }
+  if (x <= REDLINE_FRACTION) {
+    const t = (x - 1) / (REDLINE_FRACTION - 1);
+    return TORQUE_AT_POWER_PEAK * (1 - shape.fadePastPeak * t);
+  }
+  return 0; // past the redline there is no drive at all
+}
+
+/** How fast the engine could push the car if power were the only limit.
+ *
+ * Constant power against drag, which is the gearbox-free view: it says what the
+ * engine is capable of, not what the car is allowed to do. */
+export function powerLimitedTopSpeedMps(car: CarPhysicsInput): number {
   let low = 1;
   let high = 200; // 720 km/h, past anything here
   for (let i = 0; i < 50; i++) {
     const mid = (low + high) / 2;
     const resistance = dragForceN(car, mid) + ROLLING_RESISTANCE * car.weightKg * G;
     if (wheelPowerW(car) / mid > resistance) low = mid;
+    else high = mid;
+  }
+  return (low + high) / 2;
+}
+
+/** The speed each gear is good for at the rated engine speed.
+ *
+ * Top gear is set so the power peak lands where the engine runs out of breath
+ * against the air, which is how road cars are geared. Deliberately not the
+ * quoted top speed: a great many of these cars are electronically limited, and
+ * gearing to 250 km/h would turn a limiter into a mechanical ceiling the real
+ * car does not have. The limiter stays a separate cap.
+ *
+ * The rest follow as a geometric series over a fixed spread, so a four-speed
+ * takes big steps and an eight-speed small ones - the gear count is real data,
+ * the spread is not. */
+export function gearTopSpeedsMps(car: CarPhysicsInput): number[] {
+  const vTop = Math.max(car.topSpeedKph * KPH_TO_MPS, powerLimitedTopSpeedMps(car));
+  const gears = Math.max(1, car.gearCount);
+  if (gears === 1) return [vTop];
+  const step = Math.pow(GEARBOX_SPREAD, 1 / (gears - 1));
+  return Array.from({ length: gears }, (_, i) => vTop / Math.pow(step, gears - 1 - i));
+}
+
+/** Drive force in a given gear at a given speed, or zero past the redline. */
+function gearForceN(car: CarPhysicsInput, gearTopSpeed: number, speedMps: number): number {
+  const rated = ratedSpeedRadS(car);
+  const radS = (rated * speedMps) / gearTopSpeed;
+  // Wheel power is torque times engine speed, so the force works out as the
+  // torque factor times the rated power divided by the gear's own top speed.
+  return (
+    (torqueFactor(car, radS) * car.torqueNm * rated * DRIVETRAIN_EFFICIENCY) / gearTopSpeed
+  );
+}
+
+export interface Gearbox {
+  /** Speed each gear tops out at, first gear first. */
+  gearTopSpeeds: number[];
+  /** Speeds at which the next gear starts to pull harder. */
+  shiftSpeeds: number[];
+}
+
+/** Builds the gearbox once per car: the ratios and the speeds a driver would
+ * change gear at, which is where the next ratio starts to out-pull this one. */
+export function buildGearbox(car: CarPhysicsInput): Gearbox {
+  const gearTopSpeeds = gearTopSpeedsMps(car);
+  const shiftSpeeds: number[] = [];
+  for (let gear = 0; gear < gearTopSpeeds.length - 1; gear++) {
+    // Scan up from where the lower gear is still pulling to where it runs out.
+    const from = gearTopSpeeds[gear] * 0.2;
+    const to = gearTopSpeeds[gear] * REDLINE_FRACTION;
+    let crossing = to;
+    for (let v = from; v <= to; v += 0.25) {
+      if (gearForceN(car, gearTopSpeeds[gear + 1], v) >= gearForceN(car, gearTopSpeeds[gear], v)) {
+        crossing = v;
+        break;
+      }
+    }
+    shiftSpeeds.push(crossing);
+  }
+  return { gearTopSpeeds, shiftSpeeds };
+}
+
+/** Which gear the car is in at a given speed, and what it pulls there. */
+export function driveForceN(car: CarPhysicsInput, gearbox: Gearbox, speedMps: number): number {
+  let gear = 0;
+  while (gear < gearbox.shiftSpeeds.length && speedMps >= gearbox.shiftSpeeds[gear]) gear++;
+  return gearForceN(car, gearbox.gearTopSpeeds[gear], speedMps);
+}
+
+/** How fast the car would go with drag as the only thing stopping it. */
+export function dragLimitedTopSpeedMps(car: CarPhysicsInput): number {
+  const gearbox = buildGearbox(car);
+  let low = 1;
+  let high = 200; // 720 km/h, past anything here
+  for (let i = 0; i < 50; i++) {
+    const mid = (low + high) / 2;
+    const resistance = dragForceN(car, mid) + ROLLING_RESISTANCE * car.weightKg * G;
+    if (driveForceN(car, gearbox, mid) > resistance) low = mid;
     else high = mid;
   }
   return (low + high) / 2;
@@ -117,28 +283,16 @@ export function corneringSpeedCapMps(radiusM: number, car: CarPhysicsInput): num
   return Math.sqrt(baseMu * tyreFactor * drivetrainFactor * G * radiusM);
 }
 
-/** Shifts are spread evenly over the speed range, which is what a gearbox does:
- * each ratio covers a slice of it. */
-function shiftSpeedsMps(car: CarPhysicsInput): number[] {
-  const vTop = car.topSpeedKph * KPH_TO_MPS;
-  const speeds: number[] = [];
-  for (let gear = 1; gear < car.gearCount; gear++) {
-    speeds.push((vTop * gear) / car.gearCount);
-  }
-  return speeds;
-}
-
-/** Net acceleration at a given speed, given how much force the engine can put
- * down. `launchLimitN` is the traction/torque ceiling at low speed, where
- * power/v would otherwise be unbounded. */
+/** Net acceleration at a given speed. `launchLimitN` is the traction ceiling:
+ * however hard the engine pulls, the tyres decide what reaches the road. */
 function accelerationMps2(
   car: CarPhysicsInput,
+  gearbox: Gearbox,
   speedMps: number,
   launchLimitN: number,
   gradientPercent: number,
 ): number {
-  const powerLimitN = speedMps > 0.5 ? wheelPowerW(car) / speedMps : Number.POSITIVE_INFINITY;
-  const driveN = Math.min(launchLimitN, powerLimitN);
+  const driveN = Math.min(launchLimitN, driveForceN(car, gearbox, speedMps));
   const dragN = dragForceN(car, speedMps);
   const rollN = ROLLING_RESISTANCE * car.weightKg * G;
   const gradeN = car.weightKg * G * Math.sin(Math.atan(gradientPercent / 100));
@@ -147,16 +301,16 @@ function accelerationMps2(
 
 /** Time from rest to 100 km/h on the flat for a given launch limit, including
  * the gearchanges. This is what gets solved against the car's real figure. */
-function simulate0to100(car: CarPhysicsInput, launchLimitN: number): number {
+function simulate0to100(car: CarPhysicsInput, gearbox: Gearbox, launchLimitN: number): number {
   const target = 100 * KPH_TO_MPS;
-  const shifts = shiftSpeedsMps(car);
+  const shifts = gearbox.shiftSpeeds;
   const shiftCost = car.manualGearbox ? SHIFT_TIME_S.manual : SHIFT_TIME_S.automatic;
   let v = 0;
   let t = 0;
   let nextShift = 0;
 
   while (v < target && t < 120) {
-    const a = accelerationMps2(car, v, launchLimitN, 0);
+    const a = accelerationMps2(car, gearbox, v, launchLimitN, 0);
     if (a <= 0) return Number.POSITIVE_INFINITY;
     v += a * DT;
     t += DT;
@@ -171,12 +325,12 @@ function simulate0to100(car: CarPhysicsInput, launchLimitN: number): number {
 /** Solves the launch limit so the model reproduces the car's real 0-100 time.
  * Every other number in the model is measured; this one is what the measurement
  * pins down. */
-export function solveLaunchLimitN(car: CarPhysicsInput): number {
+export function solveLaunchLimitN(car: CarPhysicsInput, gearbox = buildGearbox(car)): number {
   let low = car.weightKg * 0.5; // ~0.05 g, hopeless
   let high = car.weightKg * G * 3; // ~3 g, beyond any road tyre
   for (let i = 0; i < 60; i++) {
     const mid = (low + high) / 2;
-    if (simulate0to100(car, mid) > car.accel0to100s) low = mid;
+    if (simulate0to100(car, gearbox, mid) > car.accel0to100s) low = mid;
     else high = mid;
   }
   return (low + high) / 2;
@@ -222,8 +376,9 @@ export function simulateRun(car: CarPhysicsInput, segments: Segment[]): SimResul
 
   // Forward pass: accelerate as hard as the engine, drag and gradient allow,
   // never exceeding the limit profile.
-  const launchLimitN = solveLaunchLimitN(car);
-  const shifts = shiftSpeedsMps(car);
+  const gearbox = buildGearbox(car);
+  const launchLimitN = solveLaunchLimitN(car, gearbox);
+  const shifts = gearbox.shiftSpeeds;
   const shiftCost = car.manualGearbox ? SHIFT_TIME_S.manual : SHIFT_TIME_S.automatic;
   let nextShift = 0;
 
@@ -242,7 +397,7 @@ export function simulateRun(car: CarPhysicsInput, segments: Segment[]): SimResul
     const limit = limits[i];
     if (v > limit) v = limit; // braking already accounted for by the backward pass
 
-    const a = accelerationMps2(car, v, launchLimitN, grades[i]);
+    const a = accelerationMps2(car, gearbox, v, launchLimitN, grades[i]);
     const vNext = Math.max(1, Math.min(limit, Math.sqrt(Math.max(0, v * v + 2 * a * stepM))));
     const vAvg = (v + vNext) / 2;
     t += stepM / vAvg;

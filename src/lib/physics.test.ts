@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   brakingDecelMps2,
+  buildGearbox,
+  driveForceN,
+  gearTopSpeedsMps,
+  ratedSpeedRadS,
+  torqueFactor,
   dragForceN,
   dragLimitedTopSpeedMps,
   effectiveTopSpeedMps,
@@ -302,6 +307,142 @@ describe("gearbox", () => {
     const manual = simulateRun({ ...golfGti, manualGearbox: true }, straight).totalTimeMs;
     const auto = simulateRun({ ...golfGti, manualGearbox: false }, straight).totalTimeMs;
     assert.ok(manual > auto);
+  });
+});
+
+const toRpm = (radS: number) => (radS * 60) / (2 * Math.PI);
+
+describe("engine speed", () => {
+  // Power and torque together imply where the power peak sits. These are the
+  // real figures, and the model lands close to the published engine speeds.
+  it("puts a torquey diesel low and a screamer high", () => {
+    const gtd = { ...golfGti, powerPs: 170, torqueNm: 350 };
+    const s2000 = { ...golfGti, powerPs: 240, torqueNm: 208 };
+    assert.ok(toRpm(ratedSpeedRadS(gtd)) < 4000, `${toRpm(ratedSpeedRadS(gtd))}`);
+    assert.ok(toRpm(ratedSpeedRadS(s2000)) > 8000, `${toRpm(ratedSpeedRadS(s2000))}`);
+  });
+
+  it("lands within a few hundred rpm of the real Chiron", () => {
+    const rpm = toRpm(ratedSpeedRadS({ ...veyron, powerPs: 1500, torqueNm: 1600 }));
+    assert.ok(Math.abs(rpm - 6700) < 400, `${rpm} should be near 6700`);
+  });
+
+  it("refuses a nonsense engine speed even for a broken torque figure", () => {
+    const silly = { ...golfGti, torqueNm: 1 };
+    const rpm = toRpm(ratedSpeedRadS(silly));
+    assert.ok(rpm >= 2000 && rpm <= 9600, `${rpm} should be clamped`);
+  });
+});
+
+describe("torque curve", () => {
+  it("holds almost all its torque at the rated speed", () => {
+    const rated = ratedSpeedRadS(golfGti);
+    assert.ok(torqueFactor(golfGti, rated) > 0.95);
+    assert.ok(torqueFactor(golfGti, rated) < 1);
+  });
+
+  it("never claims more than peak torque", () => {
+    const rated = ratedSpeedRadS(golfGti);
+    for (let x = 0; x <= 1.2; x += 0.01) {
+      assert.ok(torqueFactor(golfGti, rated * x) <= 1 + 1e-9, `${x} of rated exceeds peak torque`);
+    }
+  });
+
+  it("is weaker off idle than at the peak", () => {
+    const rated = ratedSpeedRadS(golfGti);
+    assert.ok(torqueFactor(golfGti, rated * 0.05) < torqueFactor(golfGti, rated * 0.6));
+  });
+
+  it("falls away past the rated speed and stops at the redline", () => {
+    const rated = ratedSpeedRadS(golfGti);
+    assert.ok(torqueFactor(golfGti, rated * 1.05) < torqueFactor(golfGti, rated));
+    assert.equal(torqueFactor(golfGti, rated * 1.2), 0);
+  });
+
+  // Power is torque times engine speed, so a curve that peaked after the rated
+  // speed would mean the car makes more than its rated power.
+  it("makes its most power at the rated speed", () => {
+    const rated = ratedSpeedRadS(golfGti);
+    const power = (x: number) => torqueFactor(golfGti, rated * x) * rated * x;
+    for (const x of [0.5, 0.7, 0.9, 1.05, 1.09]) {
+      assert.ok(power(x) <= power(1) + 1e-9, `power at ${x} of rated exceeds the peak`);
+    }
+  });
+});
+
+describe("gear ratios", () => {
+  it("gives one ratio per gear, each taller than the last", () => {
+    const speeds = gearTopSpeedsMps({ ...golfGti, gearCount: 6 });
+    assert.equal(speeds.length, 6);
+    for (let i = 1; i < speeds.length; i++) assert.ok(speeds[i] > speeds[i - 1]);
+  });
+
+  it("takes bigger steps with fewer gears", () => {
+    const four = gearTopSpeedsMps({ ...golfGti, gearCount: 4 });
+    const eight = gearTopSpeedsMps({ ...golfGti, gearCount: 8 });
+    assert.ok(four[1] / four[0] > eight[1] / eight[0]);
+  });
+
+  // Gearing to the quoted top speed would turn an electronic limiter into a
+  // mechanical ceiling the real car does not have.
+  it("gears past a limiter rather than to it", () => {
+    const limited = gearTopSpeedsMps({ ...veyron, topSpeedKph: 250 });
+    assert.ok(limited[limited.length - 1] * 3.6 > 300);
+  });
+
+  it("gives a single-speed car one ratio and no shifts", () => {
+    const ev = { ...golfGti, gearCount: 1 };
+    assert.equal(gearTopSpeedsMps(ev).length, 1);
+    assert.deepEqual(buildGearbox(ev).shiftSpeeds, []);
+  });
+
+  it("changes gear before the engine runs out of revs", () => {
+    const gearbox = buildGearbox(golfGti);
+    assert.equal(gearbox.shiftSpeeds.length, golfGti.gearCount - 1);
+    gearbox.shiftSpeeds.forEach((v, i) => {
+      assert.ok(v <= gearbox.gearTopSpeeds[i] * 1.1 + 1e-9, `shift ${i + 1} is past the redline`);
+      assert.ok(v > 0);
+    });
+  });
+
+  it("pulls hardest in first gear and least in top", () => {
+    const gearbox = buildGearbox(golfGti);
+    const inFirst = driveForceN(golfGti, gearbox, gearbox.gearTopSpeeds[0] * 0.6);
+    const inTop = driveForceN(golfGti, gearbox, gearbox.gearTopSpeeds[gearbox.gearTopSpeeds.length - 1] * 0.6);
+    assert.ok(inFirst > inTop);
+  });
+
+  // Same power, same top speed, same gear count: gearing follows the rated
+  // speed, so both sit at the same point on their curves. Only the shape of
+  // the curve can tell them apart - which is exactly what the torque figure is
+  // in the model for.
+  it("lets the broad engine pull harder off idle and the peaky one past the peak", () => {
+    const diesel = { ...golfGti, powerPs: 220, torqueNm: 450 };
+    const screamer = { ...golfGti, powerPs: 220, torqueNm: 200 };
+    const dGear = buildGearbox(diesel);
+    const sGear = buildGearbox(screamer);
+    const firstGear = dGear.gearTopSpeeds[0];
+    assert.deepEqual(dGear.gearTopSpeeds, sGear.gearTopSpeeds, "gearing should be identical");
+    assert.ok(
+      driveForceN(diesel, dGear, firstGear * 0.15) > driveForceN(screamer, sGear, firstGear * 0.15),
+      "the diesel should pull better just off idle",
+    );
+    assert.ok(
+      driveForceN(screamer, sGear, firstGear * 1.08) > driveForceN(diesel, dGear, firstGear * 1.08),
+      "the screamer should hold on better past the power peak",
+    );
+  });
+
+  // Crawling out of a hairpin is where a broad powerband earns its keep.
+  it("gets the broad engine out of a slow corner quicker", () => {
+    const diesel = { ...golfGti, powerPs: 220, torqueNm: 450 };
+    const screamer = { ...golfGti, powerPs: 220, torqueNm: 200 };
+    const hairpin: Segment[] = [
+      { kind: "straight", lengthM: 200 },
+      { kind: "corner", lengthM: 60, radiusM: 15, dir: "right" },
+      { kind: "straight", lengthM: 400 },
+    ];
+    assert.ok(simulateRun(diesel, hairpin).totalTimeMs < simulateRun(screamer, hairpin).totalTimeMs);
   });
 });
 
