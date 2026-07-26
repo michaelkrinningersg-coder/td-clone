@@ -25,6 +25,9 @@ export interface RacerProgress {
   speedKph: number;
   /** The car's simulated lap time, known up front. */
   totalTimeMs: number;
+  /** Time on this car's clock right now: running while it drives, frozen at its
+   * lap time the moment it crosses the line. */
+  elapsedMs: number;
   /** Whether the car has crossed the line at the current playback moment. */
   finished: boolean;
 }

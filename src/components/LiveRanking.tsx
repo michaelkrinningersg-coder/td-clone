@@ -84,7 +84,13 @@ function RaceView({
         const color = raceColor(racer.gridIndex);
         const progress = Math.min(100, (racer.distanceM / trackLengthM) * 100);
         return (
-          <li key={racer.carId} className="relative bg-zinc-900 px-4 py-3">
+          <li
+            key={racer.carId}
+            // Each row carries its car's racing colour, so a glance at the board
+            // and a glance at the track show the same thing.
+            className="relative border-l-4 bg-zinc-900 py-3 pl-3 pr-4"
+            style={{ borderLeftColor: color.hex }}
+          >
             {/* The lap progress sits behind the row rather than beside it, so
                 the bar reads as "how far along" without stealing a column. */}
             <div
@@ -102,24 +108,26 @@ function RaceView({
               </span>
 
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${color.bg}`} aria-hidden />
-                  <span className="truncate text-sm text-white">
-                    {car ? `${car.make} ${car.model}` : racer.carId}
-                  </span>
-                </div>
-                <div className="mt-0.5 truncate pl-[18px] text-xs text-zinc-500">
+                <span className={`block truncate text-sm ${color.text}`}>
+                  {car ? `${car.make} ${car.model}` : racer.carId}
+                </span>
+                <span className="mt-0.5 block truncate text-xs text-zinc-500">
                   {racer.finished
-                    ? `Ziel · ${formatTimeMs(racer.totalTimeMs)}`
+                    ? "im Ziel"
                     : `${racer.speedKph.toFixed(0)} km/h · ${(racer.distanceM / 1000).toFixed(2)} km · ${progress.toFixed(0)} %`}
-                </div>
+                </span>
               </div>
 
-              <span
-                className={`shrink-0 font-mono text-sm ${racer.position === 1 ? color.text : "text-zinc-400"}`}
-              >
-                {formatGap(racer)}
-              </span>
+              <div className="shrink-0 text-right">
+                {/* This car's own clock - running while it drives, stopped at
+                    its lap time once it is home. */}
+                <div
+                  className={`font-mono text-lg tabular-nums ${racer.finished ? color.text : "text-white"}`}
+                >
+                  {formatTimeMs(racer.elapsedMs)}
+                </div>
+                <div className="font-mono text-xs text-zinc-500">{formatGap(racer)}</div>
+              </div>
             </div>
           </li>
         );

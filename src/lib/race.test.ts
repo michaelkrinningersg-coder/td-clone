@@ -4,7 +4,16 @@ import { formatGap, playbackDurationMs, rankRacers, type RacerProgress } from ".
 
 let nextGrid = 0;
 function racer(carId: string, distanceM: number, opts: Partial<RacerProgress> = {}): RacerProgress {
-  return { carId, gridIndex: nextGrid++, distanceM, speedKph: 100, totalTimeMs: 100_000, finished: false, ...opts };
+  return {
+    carId,
+    gridIndex: nextGrid++,
+    distanceM,
+    speedKph: 100,
+    totalTimeMs: 100_000,
+    elapsedMs: 50_000,
+    finished: false,
+    ...opts,
+  };
 }
 
 describe("rankRacers", () => {
@@ -109,5 +118,19 @@ describe("formatGap", () => {
       racer("b", 6000, { finished: true, totalTimeMs: 102_500 }),
     ]);
     assert.equal(formatGap(finished[1]), "+2.50s");
+  });
+});
+
+describe("elapsed time", () => {
+  // Each car carries its own clock: it runs while the car drives and stops at
+  // the car's lap time once it crosses the line, so a finished car's readout
+  // stays put while the rest are still going.
+  it("keeps a finished car's clock at its lap time", () => {
+    const ranked = rankRacers([
+      racer("done", 6000, { finished: true, totalTimeMs: 95_000, elapsedMs: 95_000 }),
+      racer("still-going", 5000, { elapsedMs: 110_000 }),
+    ]);
+    assert.equal(ranked[0].elapsedMs, 95_000);
+    assert.equal(ranked[1].elapsedMs, 110_000);
   });
 });
