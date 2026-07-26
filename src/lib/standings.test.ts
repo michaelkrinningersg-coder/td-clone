@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildStandings, hasMixedTrackCounts, pointsForPosition, sortStandings } from "./standings";
+import {
+  buildMakeStandings,
+  buildStandings,
+  hasMixedTrackCounts,
+  pointsForPosition,
+  sortStandings,
+} from "./standings";
 import type { TimeEntryData } from "./time-store";
 
 let n = 0;
@@ -188,6 +194,77 @@ describe("sortStandings", () => {
       entry("two-tracks", "t2", 50_000),
     ]);
     assert.equal(sortStandings(standings, "time")[0].carId, "two-tracks");
+  });
+});
+
+describe("buildMakeStandings", () => {
+  const makes: Record<string, string> = { a1: "Audi", a2: "Audi", b1: "BMW" };
+  const makeOf = (id: string) => makes[id];
+
+  it("adds a marque's cars together", () => {
+    const standings = buildMakeStandings(
+      buildStandings([
+        entry("a1", "t1", 100),
+        entry("b1", "t1", 200),
+        entry("a2", "t1", 300),
+      ]),
+      makeOf,
+    );
+    const audi = standings.find((s) => s.make === "Audi")!;
+    assert.equal(audi.cars, 2);
+    assert.equal(audi.entries, 2);
+    assert.equal(audi.points, 5000 + 4998);
+    assert.equal(audi.wins, 1);
+  });
+
+  it("orders by points, so entering in numbers counts", () => {
+    const standings = buildMakeStandings(
+      buildStandings([entry("a1", "t1", 100), entry("b1", "t1", 90), entry("a2", "t1", 300)]),
+      makeOf,
+    );
+    // BMW won but has one car; Audi's second and third add up to more.
+    assert.equal(standings[0].make, "Audi");
+  });
+
+  it("reports points per entry for the other reading", () => {
+    const standings = buildMakeStandings(
+      buildStandings([entry("a1", "t1", 100), entry("b1", "t1", 90), entry("a2", "t1", 300)]),
+      makeOf,
+    );
+    const bmw = standings.find((s) => s.make === "BMW")!;
+    assert.equal(bmw.pointsPerEntry, 5000);
+    const audi = standings.find((s) => s.make === "Audi")!;
+    assert.ok(audi.pointsPerEntry < bmw.pointsPerEntry);
+  });
+
+  it("names the marque's best car", () => {
+    const standings = buildMakeStandings(
+      buildStandings([entry("a1", "t1", 300), entry("a2", "t1", 100)]),
+      makeOf,
+    );
+    assert.equal(standings[0].bestCarId, "a2");
+  });
+
+  it("weights the mean position by how often a car ran", () => {
+    const standings = buildMakeStandings(
+      buildStandings([
+        entry("a1", "t1", 100), // 1st
+        entry("b1", "t1", 200), // 2nd
+        entry("a2", "t2", 200), // 2nd
+        entry("b1", "t2", 100), // 1st
+      ]),
+      makeOf,
+    );
+    for (const s of standings) assert.equal(s.averagePosition, 1.5);
+  });
+
+  it("skips cars the dataset no longer holds", () => {
+    const standings = buildMakeStandings(buildStandings([entry("ghost", "t1", 100)]), makeOf);
+    assert.deepEqual(standings, []);
+  });
+
+  it("returns nothing when nothing has been raced", () => {
+    assert.deepEqual(buildMakeStandings([], makeOf), []);
   });
 });
 

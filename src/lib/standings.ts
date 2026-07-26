@@ -133,3 +133,84 @@ export function sortStandings(standings: CarStanding[], order: StandingsOrder): 
 export function hasMixedTrackCounts(standings: CarStanding[]): boolean {
   return new Set(standings.map((s) => s.raced)).size > 1;
 }
+
+export interface MakeStanding {
+  make: string;
+  points: number;
+  /** Cars of this marque that hold at least one time. */
+  cars: number;
+  /** Times set by the marque, across all its cars and tracks. */
+  entries: number;
+  wins: number;
+  podiums: number;
+  averagePosition: number;
+  /** Points divided by entries: how a marque scores per outing, so one that
+   * has entered twice is not buried by one that has entered forty times. */
+  pointsPerEntry: number;
+  /** The marque's best-placed car overall, by points. */
+  bestCarId: string;
+}
+
+/** Rolls the car standings up by marque.
+ *
+ * Ordered by total points, which rewards turning up in numbers as well as being
+ * quick - a marque with thirty cars on the boards should outscore one with two.
+ * The per-entry column is there for the other reading. */
+export function buildMakeStandings(
+  standings: CarStanding[],
+  makeOf: (carId: string) => string | undefined,
+): MakeStanding[] {
+  const totals = new Map<
+    string,
+    {
+      points: number;
+      cars: number;
+      entries: number;
+      wins: number;
+      podiums: number;
+      positions: number;
+      bestCarId: string;
+      bestCarPoints: number;
+    }
+  >();
+
+  for (const standing of standings) {
+    const make = makeOf(standing.carId);
+    if (make === undefined) continue; // a car the dataset no longer holds
+    const current = totals.get(make) ?? {
+      points: 0,
+      cars: 0,
+      entries: 0,
+      wins: 0,
+      podiums: 0,
+      positions: 0,
+      bestCarId: standing.carId,
+      bestCarPoints: -1,
+    };
+    current.points += standing.points;
+    current.cars += 1;
+    current.entries += standing.raced;
+    current.wins += standing.wins;
+    current.podiums += standing.podiums;
+    current.positions += standing.averagePosition * standing.raced;
+    if (standing.points > current.bestCarPoints) {
+      current.bestCarPoints = standing.points;
+      current.bestCarId = standing.carId;
+    }
+    totals.set(make, current);
+  }
+
+  return Array.from(totals.entries())
+    .map(([make, t]) => ({
+      make,
+      points: t.points,
+      cars: t.cars,
+      entries: t.entries,
+      wins: t.wins,
+      podiums: t.podiums,
+      averagePosition: t.positions / t.entries,
+      pointsPerEntry: t.points / t.entries,
+      bestCarId: t.bestCarId,
+    }))
+    .sort((a, b) => b.points - a.points || a.averagePosition - b.averagePosition);
+}

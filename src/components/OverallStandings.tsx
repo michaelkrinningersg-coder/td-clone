@@ -8,6 +8,7 @@ import { formatDurationMs } from "@/lib/format";
 import { buildStandings, hasMixedTrackCounts, sortStandings, type StandingsOrder } from "@/lib/standings";
 import { timeStore, type TimeEntryData } from "@/lib/time-store";
 import { ResetButton } from "@/components/ResetButton";
+import { MakeStandings } from "@/components/MakeStandings";
 
 const PODIUM = ["text-amber-300", "text-zinc-300", "text-orange-400"];
 
@@ -225,6 +226,8 @@ export function OverallStandings() {
           </tbody>
         </table>
       </div>
+
+      <MakeStandings standings={standings} />
     </>
   );
 }
