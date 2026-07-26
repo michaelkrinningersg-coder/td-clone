@@ -12,6 +12,11 @@ import {
   parseTorqueNm,
   parseWeightKg,
   cleanVariant,
+  parseBrake,
+  parseDragCoefficient,
+  parseGearbox,
+  parseMillimetres,
+  parseTyreWidthMm,
   dedupeVariants,
   type ImportedCar,
   type RawEngine,
@@ -29,11 +34,18 @@ const completeEngine: RawEngine = {
       "Fuel:": "Gasoline",
     },
     "Weight Specs": { "Unladen Weight:": "3560 Lbs (1615 Kg)" },
+    "Brakes Specs": { "Front:": "Ventilated Discs", "Rear:": "Discs" },
+    "Tires Specs": { "Tire Size:": "245/40 R18" },
     "Performance Specs": {
       "Acceleration 0-62 Mph (0-100 Kph):": "5.6 S",
       "Top Speed:": "155 Mph (249 Km/H)",
     },
-    "Transmission Specs": { "Drive Type:": "Rear Wheel Drive" },
+    "Transmission Specs": { "Drive Type:": "Rear Wheel Drive", "Gearbox:": "6-Speed Manual" },
+    Dimensions: {
+      "Aerodynamics (Cd):": "0.34",
+      "Width:": "74.4 In (1890 Mm)",
+      "Height:": "52.8 In (1341 Mm)",
+    },
   },
 };
 
@@ -54,6 +66,14 @@ describe("convertEngine", () => {
       torqueNm: 407,
       drivetrain: "RWD",
       fuelType: "Gasoline",
+      dragCoefficient: 0.34,
+      widthMm: 1890,
+      heightMm: 1341,
+      brakeFront: "ventilated-disc",
+      brakeRear: "disc",
+      tyreWidthMm: 245,
+      gearCount: 6,
+      manualGearbox: true,
     });
   });
 
@@ -67,6 +87,13 @@ describe("convertEngine", () => {
     ["Performance Specs", "Acceleration 0-62 Mph (0-100 Kph):"],
     ["Performance Specs", "Top Speed:"],
     ["Transmission Specs", "Drive Type:"],
+    ["Transmission Specs", "Gearbox:"],
+    ["Dimensions", "Aerodynamics (Cd):"],
+    ["Dimensions", "Width:"],
+    ["Dimensions", "Height:"],
+    ["Brakes Specs", "Front:"],
+    ["Brakes Specs", "Rear:"],
+    ["Tires Specs", "Tire Size:"],
   ];
 
   for (const [group, key] of required) {
@@ -240,6 +267,14 @@ describe("dedupeVariants", () => {
     torqueNm: 400,
     drivetrain: "RWD",
     fuelType: "Gasoline",
+    dragCoefficient: 0.32,
+    widthMm: 1800,
+    heightMm: 1450,
+    brakeFront: "ventilated-disc" as const,
+    brakeRear: "disc" as const,
+    tyreWidthMm: 225,
+    gearCount: 6,
+    manualGearbox: false,
     ...over,
   });
 
@@ -307,6 +342,14 @@ describe("isPlausible", () => {
     torqueNm: 407,
     drivetrain: "AWD",
     fuelType: "Gasoline",
+    dragCoefficient: 0.32,
+    widthMm: 1800,
+    heightMm: 1450,
+    brakeFront: "ventilated-disc" as const,
+    brakeRear: "disc" as const,
+    tyreWidthMm: 225,
+    gearCount: 6,
+    manualGearbox: false,
   };
 
   it("accepts a normal car", () => {
@@ -335,5 +378,73 @@ describe("cleanVariant", () => {
   it("returns null when there is nothing left", () => {
     assert.equal(cleanVariant(undefined), null);
     assert.equal(cleanVariant("  "), null);
+  });
+});
+
+describe("parseDragCoefficient", () => {
+  it("reads the bare number", () => {
+    assert.equal(parseDragCoefficient("0.31"), 0.31);
+    assert.equal(parseDragCoefficient(" 0.28 "), 0.28);
+  });
+
+  it("rejects values outside what a car can physically have", () => {
+    for (const raw of [undefined, "", "-", "0", "5", "0.02"]) {
+      assert.equal(parseDragCoefficient(raw), null, `expected ${JSON.stringify(raw)} to be rejected`);
+    }
+  });
+});
+
+describe("parseBrake", () => {
+  // The source spells the same brake a dozen ways, so the words decide.
+  it("recognises the spellings the source uses", () => {
+    for (const raw of ["Ventilated Discs", "Vented Discs", "Ventilated Disks", "Ventilated Disc"]) {
+      assert.equal(parseBrake(raw), "ventilated-disc", raw);
+    }
+    assert.equal(parseBrake("Single-Piston Floating-Calliper Vented Disc Brakes"), "ventilated-disc");
+    assert.equal(parseBrake("Discs"), "disc");
+    assert.equal(parseBrake("Solid Discs"), "disc");
+    assert.equal(parseBrake("Drums"), "drum");
+    assert.equal(parseBrake("Drum"), "drum");
+  });
+
+  it("returns null when it cannot tell", () => {
+    assert.equal(parseBrake(undefined), null);
+    assert.equal(parseBrake(""), null);
+    assert.equal(parseBrake("Regenerative"), null);
+  });
+});
+
+describe("parseTyreWidthMm", () => {
+  it("takes the tread width", () => {
+    assert.equal(parseTyreWidthMm("225/50 R17"), 225);
+    assert.equal(parseTyreWidthMm("205/55R16"), 205);
+    assert.equal(parseTyreWidthMm("345/30 ZR20"), 345);
+  });
+
+  it("returns null for anything it cannot read", () => {
+    for (const raw of [undefined, "", "R17", "50/17"]) assert.equal(parseTyreWidthMm(raw), null);
+  });
+});
+
+describe("parseGearbox", () => {
+  it("reads the gear count and whether it is manual", () => {
+    assert.deepEqual(parseGearbox("6-Speed Manual"), { gearCount: 6, manual: true });
+    assert.deepEqual(parseGearbox("8-Speed Automatic"), { gearCount: 8, manual: false });
+    assert.deepEqual(parseGearbox("7 Speed Dual Clutch"), { gearCount: 7, manual: false });
+  });
+
+  it("returns null without a gear count", () => {
+    for (const raw of [undefined, "", "Automatic", "CVT"]) assert.equal(parseGearbox(raw), null);
+  });
+});
+
+describe("parseMillimetres", () => {
+  it("prefers the metric figure in parentheses", () => {
+    assert.equal(parseMillimetres("74.4 In (1890 Mm)"), 1890);
+    assert.equal(parseMillimetres("1890 Mm"), 1890);
+  });
+
+  it("returns null when only imperial units are given", () => {
+    assert.equal(parseMillimetres("74.4 In"), null);
   });
 });

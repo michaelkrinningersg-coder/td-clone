@@ -27,6 +27,8 @@ export interface RawBrand {
   name?: string;
 }
 
+export type BrakeKind = "ventilated-disc" | "disc" | "drum";
+
 export interface ImportedCar {
   make: string;
   model: string;
@@ -41,9 +43,26 @@ export interface ImportedCar {
   torqueNm: number;
   drivetrain: Drivetrain;
   fuelType: string;
+  /** Drag coefficient, plus the body dimensions the frontal area comes from. */
+  dragCoefficient: number;
+  widthMm: number;
+  heightMm: number;
+  brakeFront: BrakeKind;
+  brakeRear: BrakeKind;
+  /** Tread width in mm, e.g. 225 from "225/50 R17". */
+  tyreWidthMm: number;
+  gearCount: number;
+  manualGearbox: boolean;
 }
 
 export const SPEC_FIELDS = {
+  drag: ["Dimensions", "Aerodynamics (Cd):"],
+  width: ["Dimensions", "Width:"],
+  height: ["Dimensions", "Height:"],
+  brakeFront: ["Brakes Specs", "Front:"],
+  brakeRear: ["Brakes Specs", "Rear:"],
+  tyres: ["Tires Specs", "Tire Size:"],
+  gearbox: ["Transmission Specs", "Gearbox:"],
   power: ["Engine Specs", "Power:"],
   torque: ["Engine Specs", "Torque:"],
   fuel: ["Engine Specs", "Fuel:"],
@@ -111,6 +130,50 @@ function parseMetric(raw: string | undefined, preferred: RegExp, fallback: RegEx
 function toNumber(raw: string): number | null {
   const n = Number.parseFloat(raw.replace(",", "."));
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** "0.31" - a bare number, but guard the range so a stray value cannot make a
+ * car slippery beyond physics. */
+export function parseDragCoefficient(raw: string | undefined): number | null {
+  const n = toNumber((raw ?? "").trim());
+  return n !== null && n >= 0.1 && n <= 1.2 ? n : null;
+}
+
+/** "74.4 In (1890 Mm)" */
+export function parseMillimetres(raw: string | undefined): number | null {
+  return parseMetric(raw, /\(\s*(\d+(?:[.,]\d+)?)\s*mm\s*\)/i, /(\d+(?:[.,]\d+)?)\s*mm\b/i);
+}
+
+/** The source spells brakes many ways ("Ventilated Discs", "Vented Disc",
+ * "Single-Piston Floating-Calliper Vented Disc Brakes"), so match on what the
+ * words say rather than on the exact string. */
+export function parseBrake(raw: string | undefined): BrakeKind | null {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (!v) return null;
+  const isDisc = /disc|disk/.test(v);
+  if (isDisc && /vent/.test(v)) return "ventilated-disc";
+  if (isDisc) return "disc";
+  if (/drum/.test(v)) return "drum";
+  return null;
+}
+
+/** "225/50 R17" or "205/55R16" - only the tread width matters here. */
+export function parseTyreWidthMm(raw: string | undefined): number | null {
+  const m = (raw ?? "").match(/(\d{3})\s*\//);
+  if (!m) return null;
+  const width = Number.parseInt(m[1], 10);
+  return width >= 100 && width <= 400 ? width : null;
+}
+
+/** "6-Speed Manual" / "8-Speed Automatic" */
+export function parseGearbox(raw: string | undefined): { gearCount: number; manual: boolean } | null {
+  const v = (raw ?? "").trim();
+  if (!v) return null;
+  const m = v.match(/(\d{1,2})\s*-?\s*speed/i);
+  if (!m) return null;
+  const gearCount = Number.parseInt(m[1], 10);
+  if (gearCount < 1 || gearCount > 12) return null;
+  return { gearCount, manual: /manual/i.test(v) };
 }
 
 /** Names that plain titlecasing gets wrong. */
@@ -231,6 +294,13 @@ export function convertEngine(
   const accel0to100s = parseSeconds(spec(engine, SPEC_FIELDS.accel));
   const topSpeedKph = parseTopSpeedKph(spec(engine, SPEC_FIELDS.topSpeed));
   const drivetrain = parseDrivetrain(spec(engine, SPEC_FIELDS.drive));
+  const dragCoefficient = parseDragCoefficient(spec(engine, SPEC_FIELDS.drag));
+  const widthMm = parseMillimetres(spec(engine, SPEC_FIELDS.width));
+  const heightMm = parseMillimetres(spec(engine, SPEC_FIELDS.height));
+  const brakeFront = parseBrake(spec(engine, SPEC_FIELDS.brakeFront));
+  const brakeRear = parseBrake(spec(engine, SPEC_FIELDS.brakeRear));
+  const tyreWidthMm = parseTyreWidthMm(spec(engine, SPEC_FIELDS.tyres));
+  const gearbox = parseGearbox(spec(engine, SPEC_FIELDS.gearbox));
   // Fuel is free text, so require actual letters rather than a "-" placeholder.
   const rawFuel = spec(engine, SPEC_FIELDS.fuel)?.trim();
   const fuelType = rawFuel && /[a-z]/i.test(rawFuel) ? rawFuel : undefined;
@@ -242,7 +312,14 @@ export function convertEngine(
     accel0to100s === null ||
     topSpeedKph === null ||
     !drivetrain ||
-    !fuelType
+    !fuelType ||
+    dragCoefficient === null ||
+    widthMm === null ||
+    heightMm === null ||
+    !brakeFront ||
+    !brakeRear ||
+    tyreWidthMm === null ||
+    !gearbox
   ) {
     return null;
   }
@@ -259,6 +336,14 @@ export function convertEngine(
     torqueNm,
     drivetrain,
     fuelType,
+    dragCoefficient,
+    widthMm,
+    heightMm,
+    brakeFront,
+    brakeRear,
+    tyreWidthMm,
+    gearCount: gearbox.gearCount,
+    manualGearbox: gearbox.manual,
   };
 }
 
@@ -273,6 +358,12 @@ export function performanceSignature(car: ImportedCar): string {
     car.torqueNm,
     car.drivetrain,
     car.fuelType,
+    car.dragCoefficient,
+    car.brakeFront,
+    car.brakeRear,
+    car.tyreWidthMm,
+    car.gearCount,
+    car.manualGearbox,
   ].join("|");
 }
 

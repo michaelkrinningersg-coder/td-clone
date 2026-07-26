@@ -41,6 +41,16 @@ model Car {
   drivetrain   Drivetrain
   fuelType     String
 
+  // Aerodynamics, brakes, tyres and gearbox - all real, all used by the physics
+  dragCoefficient Float
+  widthMm         Float
+  heightMm        Float
+  brakeFront      String
+  brakeRear       String
+  tyreWidthMm     Float
+  gearCount       Int
+  manualGearbox   Boolean
+
   timeEntries TimeEntry[]
 
   @@unique([make, model, year, variant])

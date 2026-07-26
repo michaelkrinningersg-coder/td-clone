@@ -22,6 +22,14 @@ const car: CarData = {
   torqueNm: 410,
   drivetrain: "AWD",
   fuelType: "Gasoline",
+  dragCoefficient: 0.31,
+  widthMm: 1816,
+  heightMm: 1435,
+  brakeFront: "ventilated-disc",
+  brakeRear: "disc",
+  tyreWidthMm: 235,
+  gearCount: 6,
+  manualGearbox: true,
 };
 
 const filter = (over: Partial<CarFilter>): CarFilter => ({ ...EMPTY_FILTER, ...over });

@@ -11,7 +11,15 @@ CREATE TABLE "Car" (
     "weightKg" REAL NOT NULL,
     "torqueNm" REAL NOT NULL,
     "drivetrain" TEXT NOT NULL,
-    "fuelType" TEXT NOT NULL
+    "fuelType" TEXT NOT NULL,
+    "dragCoefficient" REAL NOT NULL,
+    "widthMm" REAL NOT NULL,
+    "heightMm" REAL NOT NULL,
+    "brakeFront" TEXT NOT NULL,
+    "brakeRear" TEXT NOT NULL,
+    "tyreWidthMm" REAL NOT NULL,
+    "gearCount" INTEGER NOT NULL,
+    "manualGearbox" BOOLEAN NOT NULL
 );
 
 -- CreateTable

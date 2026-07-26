@@ -3,6 +3,7 @@ import { tracks as trackDefs } from "@/data/tracks";
 import { trackLengthM, type Segment } from "@/lib/track-types";
 import { carSlug, slugify, trackSlug } from "@/lib/slug";
 import type { Drivetrain } from "@/lib/physics";
+import type { BrakeKind } from "@/lib/car-import";
 
 /** Cars and tracks are immutable reference data, so both the SQLite path and the
  * static Pages build read them from these same seed files - there is no second
@@ -22,6 +23,15 @@ export interface CarData {
   torqueNm: number;
   drivetrain: Drivetrain;
   fuelType: string;
+  /** Drag coefficient plus the body dimensions the frontal area comes from. */
+  dragCoefficient: number;
+  widthMm: number;
+  heightMm: number;
+  brakeFront: BrakeKind;
+  brakeRear: BrakeKind;
+  tyreWidthMm: number;
+  gearCount: number;
+  manualGearbox: boolean;
 }
 
 export interface TrackData {
