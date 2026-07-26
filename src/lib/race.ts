@@ -11,9 +11,13 @@ export const RACE_COLORS = [
   { hex: "#22d3ee", text: "text-cyan-400", bg: "bg-cyan-400", ring: "ring-cyan-500", border: "border-cyan-500" },
   { hex: "#fb923c", text: "text-orange-400", bg: "bg-orange-400", ring: "ring-orange-500", border: "border-orange-500" },
   { hex: "#a3e635", text: "text-lime-400", bg: "bg-lime-400", ring: "ring-lime-500", border: "border-lime-500" },
+  { hex: "#f87171", text: "text-red-400", bg: "bg-red-400", ring: "ring-red-500", border: "border-red-500" },
+  { hex: "#2dd4bf", text: "text-teal-400", bg: "bg-teal-400", ring: "ring-teal-500", border: "border-teal-500" },
 ] as const;
 
-export const MAX_RACERS = RACE_COLORS.length;
+/** Cars the player may put on the grid. Deliberately not the palette length:
+ * the last two colours exist for the marque duel, which fields ten. */
+export const MAX_RACERS = 8;
 
 export function raceColor(index: number) {
   return RACE_COLORS[index % RACE_COLORS.length];

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { CarData, StatRange, StatRanges } from "@/lib/data";
 import { raceColor } from "@/lib/race";
 import { brandColor } from "@/lib/brand-colors";
@@ -115,6 +116,14 @@ export function CarCard({ car, statRanges }: { car: CarData; statRanges: StatRan
       </button>
 
       <div className="absolute right-3 top-3 flex items-center gap-1.5">
+        <Link
+          href={`/car?id=${encodeURIComponent(car.id)}`}
+          aria-label={`Alle Daten zum ${car.make} ${car.model}`}
+          title="Alle Daten und simulierte Zeiten"
+          className="rounded-full px-1.5 text-sm leading-none text-zinc-700 transition-colors hover:text-emerald-400"
+        >
+          ⓘ
+        </Link>
         {selected && (
           <span
             className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${color!.bg} text-zinc-950`}
