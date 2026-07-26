@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildStandings, pointsForPosition } from "./standings";
+import { buildStandings, hasMixedTrackCounts, pointsForPosition, sortStandings } from "./standings";
 import type { TimeEntryData } from "./time-store";
 
 let n = 0;
@@ -10,15 +10,44 @@ function entry(carId: string, trackId: string, timeMs: number): TimeEntryData {
 
 describe("pointsForPosition", () => {
   it("drops steeply over the first places", () => {
-    assert.equal(pointsForPosition(1), 25);
-    assert.equal(pointsForPosition(2), 18);
-    assert.equal(pointsForPosition(3), 15);
+    assert.equal(pointsForPosition(1), 2500);
+    assert.equal(pointsForPosition(2), 1800);
+    assert.equal(pointsForPosition(3), 1500);
+    assert.equal(pointsForPosition(10), 100);
   });
 
-  it("gives a point for turning up, however far back", () => {
-    assert.equal(pointsForPosition(10), 1);
-    assert.equal(pointsForPosition(11), 1);
-    assert.equal(pointsForPosition(500), 1);
+  it("pays more for gaining a place at the front than at the back", () => {
+    const front = pointsForPosition(1) - pointsForPosition(2);
+    const back = pointsForPosition(9) - pointsForPosition(10);
+    const tail = pointsForPosition(100) - pointsForPosition(101);
+    assert.ok(front > back, `${front} should beat ${back}`);
+    assert.ok(back > tail, `${back} should beat ${tail}`);
+  });
+
+  it("scores down to the 2500th place and no further", () => {
+    assert.equal(pointsForPosition(11), 99);
+    assert.equal(pointsForPosition(2500), 1);
+    assert.equal(pointsForPosition(2501), 0);
+    assert.equal(pointsForPosition(20_000), 0);
+  });
+
+  it("never goes up as the position gets worse", () => {
+    let previous = Infinity;
+    for (let position = 1; position <= 2600; position++) {
+      const points = pointsForPosition(position);
+      assert.ok(points <= previous, `position ${position} scores more than ${position - 1}`);
+      previous = points;
+    }
+  });
+
+  it("falls in a straight line behind the top ten", () => {
+    // Halfway through the tail should be about halfway between 99 and 1.
+    assert.ok(Math.abs(pointsForPosition(1255) - 50) <= 1);
+  });
+
+  it("ignores a position that does not exist", () => {
+    assert.equal(pointsForPosition(0), 0);
+    assert.equal(pointsForPosition(-3), 0);
   });
 });
 
@@ -36,8 +65,8 @@ describe("buildStandings", () => {
     ]);
     // Both won once and came second once.
     assert.equal(standings.length, 2);
-    assert.equal(standings[0].points, 25 + 18);
-    assert.equal(standings[1].points, 25 + 18);
+    assert.equal(standings[0].points, 2500 + 1800);
+    assert.equal(standings[1].points, 2500 + 1800);
     for (const s of standings) {
       assert.equal(s.raced, 2);
       assert.equal(s.wins, 1);
@@ -54,8 +83,8 @@ describe("buildStandings", () => {
     ]);
     const sprinter = standings.find((s) => s.carId === "sprinter")!;
     const allrounder = standings.find((s) => s.carId === "allrounder")!;
-    assert.equal(sprinter.points, 25);
-    assert.equal(allrounder.points, 18 + 25); // second, then a win elsewhere
+    assert.equal(sprinter.points, 2500);
+    assert.equal(allrounder.points, 1800 + 2500); // second, then a win elsewhere
     assert.equal(standings[0].carId, "allrounder");
   });
 
@@ -86,8 +115,6 @@ describe("buildStandings", () => {
   });
 
   it("breaks a points tie on the better average position", () => {
-    // Both score 26: one won and came tenth, the other was second twice
-    // (18+18=36) - so instead make the tie exact.
     const standings = buildStandings([
       entry("winner", "t1", 100),
       entry("second", "t1", 200),
@@ -108,5 +135,84 @@ describe("buildStandings", () => {
       standings.map((s) => s.carId),
       ["fast", "mid", "slow"],
     );
+  });
+
+  it("adds every recorded time up", () => {
+    const standings = buildStandings([entry("a", "t1", 100_000), entry("a", "t2", 250_000)]);
+    assert.equal(standings[0].totalTimeMs, 350_000);
+  });
+});
+
+describe("sortStandings", () => {
+  // Same four cars, three ways of reading the same times.
+  const built = buildStandings([
+    entry("allrounder", "t1", 100_000),
+    entry("allrounder", "t2", 100_000),
+    entry("sprinter", "t1", 99_000),
+    entry("sprinter", "t2", 130_000),
+  ]);
+
+  it("puts the smallest total first when ordering by time", () => {
+    const sorted = sortStandings(built, "time");
+    assert.deepEqual(
+      sorted.map((s) => s.carId),
+      ["allrounder", "sprinter"], // 200.0s against 229.0s
+    );
+  });
+
+  it("puts the smallest mean shortfall first when ordering by gap", () => {
+    const sorted = sortStandings(built, "gap");
+    // The sprinter is 31.3% off on t2, the allrounder 1% off on t1.
+    assert.equal(sorted[0].carId, "allrounder");
+  });
+
+  it("keeps the points order untouched by default", () => {
+    assert.deepEqual(
+      sortStandings(built, "points").map((s) => s.carId),
+      built.map((s) => s.carId),
+    );
+  });
+
+  it("does not change the table it was given", () => {
+    const before = built.map((s) => s.carId);
+    sortStandings(built, "time");
+    assert.deepEqual(
+      built.map((s) => s.carId),
+      before,
+    );
+  });
+
+  it("puts the car that covered more ground first on an equal total", () => {
+    const standings = buildStandings([
+      entry("one-track", "t1", 100_000),
+      entry("two-tracks", "t1", 50_000),
+      entry("two-tracks", "t2", 50_000),
+    ]);
+    assert.equal(sortStandings(standings, "time")[0].carId, "two-tracks");
+  });
+});
+
+describe("hasMixedTrackCounts", () => {
+  it("is false while everyone has run the same tracks", () => {
+    const standings = buildStandings([
+      entry("a", "t1", 100),
+      entry("b", "t1", 200),
+      entry("a", "t2", 100),
+      entry("b", "t2", 200),
+    ]);
+    assert.equal(hasMixedTrackCounts(standings), false);
+  });
+
+  it("is true as soon as one car has skipped a track", () => {
+    const standings = buildStandings([
+      entry("a", "t1", 100),
+      entry("b", "t1", 200),
+      entry("a", "t2", 100),
+    ]);
+    assert.equal(hasMixedTrackCounts(standings), true);
+  });
+
+  it("is false for an empty table", () => {
+    assert.equal(hasMixedTrackCounts([]), false);
   });
 });
