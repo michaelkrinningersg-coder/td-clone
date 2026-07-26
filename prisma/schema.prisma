@@ -27,9 +27,10 @@ model Car {
   id String @id
 
   // Identity (needed to tell cars apart, not a performance stat)
-  make  String
-  model String
-  year  Int
+  make    String
+  model   String
+  variant String
+  year    Int
 
   // Performance stats - real fields from CarQuery, only cars with ALL of these present are imported
   topSpeedKph  Float
@@ -42,7 +43,7 @@ model Car {
 
   timeEntries TimeEntry[]
 
-  @@unique([make, model, year])
+  @@unique([make, model, year, variant])
 }
 
 model Track {
@@ -70,5 +71,8 @@ model TimeEntry {
   car   Car   @relation(fields: [carId], references: [id])
   track Track @relation(fields: [trackId], references: [id])
 
+  // A car holds exactly one time per track - its best. Repeating a run must not
+  // fill the board with copies, so this is enforced by the database too.
+  @@unique([carId, trackId])
   @@index([trackId, timeMs])
 }

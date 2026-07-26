@@ -3,33 +3,47 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { getCar, getTrack } from "@/lib/data";
+import { getCars, getTrack } from "@/lib/data";
+import { MAX_RACERS, raceColor } from "@/lib/race";
 import { RaceRunner } from "@/components/RaceRunner";
 
 function Race() {
   const params = useSearchParams();
-  const car = getCar(params.get("carId") ?? "");
+  // The grid lives in the URL so a race can be linked to and reloaded.
+  const carIds = (params.get("cars") ?? "").split(",").filter(Boolean).slice(0, MAX_RACERS);
+  const cars = getCars(carIds);
   const track = getTrack(params.get("trackId") ?? "");
 
-  if (!car || !track) {
+  if (cars.length === 0 || !track) {
     return (
-      <div className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
+      <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
         <p className="text-zinc-400">Auto oder Strecke nicht gefunden.</p>
         <Link href="/" className="mt-4 inline-block text-emerald-400 hover:text-emerald-300">
-          ← Zur Autoauswahl
+          ← Zur Markenauswahl
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl flex-1 px-6 py-10">
-      <p className="text-sm text-zinc-400">
-        {car.make} {car.model} ({car.year}) auf <span className="text-white">{track.name}</span>
-      </p>
-      <h1 className="mt-1 text-2xl font-bold text-white">Fahrt starten</h1>
+    <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h1 className="text-2xl font-bold text-white">{track.name}</h1>
+        <span className="text-sm text-zinc-500">
+          {track.type === "SPRINT" ? "Sprint" : "Rundstrecke"} · {(track.lengthM / 1000).toFixed(2)} km
+        </span>
+      </div>
 
-      <RaceRunner car={car} track={track} />
+      <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+        {cars.map((car, i) => (
+          <li key={car.id} className="flex items-center gap-2 text-zinc-300">
+            <span className={`h-2.5 w-2.5 rounded-full ${raceColor(i).bg}`} aria-hidden />
+            {car.make} {car.model} ({car.year})
+          </li>
+        ))}
+      </ul>
+
+      <RaceRunner cars={cars} track={track} />
     </div>
   );
 }

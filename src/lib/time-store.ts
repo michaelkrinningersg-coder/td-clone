@@ -20,6 +20,16 @@ export interface SaveResult {
   entry: TimeEntryData;
   rank: number;
   totalEntries: number;
+  /** True when this run beat the car's previous time on the track. */
+  improved: boolean;
+}
+
+/** Picks which of two runs by the same car on the same track survives. A car
+ * holds one time per track - its best - so repeating a run cannot fill the
+ * board with copies. The simulation is deterministic, so a repeat normally ties
+ * exactly, and a tie keeps the original entry rather than resetting its date. */
+export function isImprovement(previousMs: number, candidateMs: number): boolean {
+  return candidateMs < previousMs;
 }
 
 export interface TimeStore {
@@ -45,20 +55,34 @@ function writeAll(entries: TimeEntryData[]) {
 
 const localStorageStore: TimeStore = {
   async saveRun(carId, trackId, timeMs) {
-    const entry: TimeEntryData = {
-      id: `${trackId}:${carId}:${Date.now()}`,
-      carId,
-      trackId,
-      timeMs,
-      createdAt: new Date().toISOString(),
-    };
     const all = readAll();
-    all.push(entry);
-    writeAll(all);
+    const index = all.findIndex((e) => e.trackId === trackId && e.carId === carId);
+
+    let entry: TimeEntryData;
+    let improved = false;
+
+    if (index === -1) {
+      entry = {
+        id: `${trackId}:${carId}`,
+        carId,
+        trackId,
+        timeMs,
+        createdAt: new Date().toISOString(),
+      };
+      all.push(entry);
+      writeAll(all);
+    } else if (isImprovement(all[index].timeMs, timeMs)) {
+      entry = { ...all[index], timeMs, createdAt: new Date().toISOString() };
+      all[index] = entry;
+      improved = true;
+      writeAll(all);
+    } else {
+      entry = all[index]; // existing time stands
+    }
 
     const onTrack = all.filter((e) => e.trackId === trackId);
-    const rank = onTrack.filter((e) => e.timeMs < timeMs).length + 1;
-    return { entry, rank, totalEntries: onTrack.length };
+    const rank = onTrack.filter((e) => e.timeMs < entry.timeMs).length + 1;
+    return { entry, rank, totalEntries: onTrack.length, improved };
   },
 
   async getLeaderboard(trackId) {

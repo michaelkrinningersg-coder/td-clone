@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCar, getTrack } from "@/lib/data";
+import { isImprovement } from "@/lib/time-store";
 
 /** Local-dev only: persists a lap time to SQLite and reports where it ranks.
  * Excluded from the static Pages build via `pageExtensions` in next.config.ts,
@@ -25,24 +26,38 @@ export async function POST(req: Request) {
   if (!getCar(carId)) return NextResponse.json({ error: "Auto nicht gefunden" }, { status: 404 });
   if (!getTrack(trackId)) return NextResponse.json({ error: "Strecke nicht gefunden" }, { status: 404 });
 
-  const entry = await prisma.timeEntry.create({
-    data: { carId, trackId, timeMs: Math.round(timeMs) },
-  });
+  const rounded = Math.round(timeMs);
+  const previous = await prisma.timeEntry.findUnique({ where: { carId_trackId: { carId, trackId } } });
+
+  // A car keeps one time per track - its best - so a repeat run replaces the
+  // stored time only when it is genuinely quicker.
+  let entry = previous;
+  let improved = false;
+  if (!previous) {
+    entry = await prisma.timeEntry.create({ data: { carId, trackId, timeMs: rounded } });
+  } else if (isImprovement(previous.timeMs, rounded)) {
+    entry = await prisma.timeEntry.update({
+      where: { carId_trackId: { carId, trackId } },
+      data: { timeMs: rounded, createdAt: new Date() },
+    });
+    improved = true;
+  }
 
   const [fasterCount, totalEntries] = await Promise.all([
-    prisma.timeEntry.count({ where: { trackId, timeMs: { lt: entry.timeMs } } }),
+    prisma.timeEntry.count({ where: { trackId, timeMs: { lt: entry!.timeMs } } }),
     prisma.timeEntry.count({ where: { trackId } }),
   ]);
 
   return NextResponse.json({
     entry: {
-      id: entry.id,
-      carId: entry.carId,
-      trackId: entry.trackId,
-      timeMs: entry.timeMs,
-      createdAt: entry.createdAt.toISOString(),
+      id: entry!.id,
+      carId: entry!.carId,
+      trackId: entry!.trackId,
+      timeMs: entry!.timeMs,
+      createdAt: entry!.createdAt.toISOString(),
     },
     rank: fasterCount + 1,
     totalEntries,
+    improved,
   });
 }

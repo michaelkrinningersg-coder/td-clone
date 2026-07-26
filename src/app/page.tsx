@@ -1,14 +1,14 @@
-import { cars } from "@/lib/data";
-import { CarPicker } from "@/components/CarPicker";
+import { brands, cars } from "@/lib/data";
+import { BrandBrowser } from "@/components/BrandBrowser";
+import { MAX_RACERS } from "@/lib/race";
 
 export default function HomePage() {
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
-      <h1 className="text-2xl font-bold text-white">Auto auswählen</h1>
+      <h1 className="text-2xl font-bold text-white">Marke wählen</h1>
       <p className="mt-1 text-sm text-zinc-400">
-        Alle Werte sind reale Fahrzeugdaten. Ein voller Balken heisst immer &quot;stark&quot;, gemessen am
-        schwaechsten und staerksten Auto im Feld — auch bei 0-100 und Gewicht, wo der kleinere Wert der
-        bessere ist.
+        {cars.length} Autos aus {brands.length} Marken, alle Werte real. Stell dir bis zu {MAX_RACERS} Autos
+        ins Startfeld — auch quer über die Marken — und lass sie gegeneinander fahren.
       </p>
 
       {cars.length === 0 ? (
@@ -16,7 +16,7 @@ export default function HomePage() {
           Noch keine Autos vorhanden. Fuehre <code className="text-zinc-200">npm run import:cars</code> aus.
         </p>
       ) : (
-        <CarPicker />
+        <BrandBrowser />
       )}
     </div>
   );

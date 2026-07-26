@@ -1,7 +1,7 @@
 import carsJson from "@/data/cars.json";
 import { tracks as trackDefs } from "@/data/tracks";
 import { trackLengthM, type Segment } from "@/lib/track-types";
-import { carSlug, trackSlug } from "@/lib/slug";
+import { carSlug, slugify, trackSlug } from "@/lib/slug";
 import type { Drivetrain } from "@/lib/physics";
 
 /** Cars and tracks are immutable reference data, so both the SQLite path and the
@@ -12,6 +12,8 @@ export interface CarData {
   id: string;
   make: string;
   model: string;
+  /** Engine variant; several can exist per model year when they drive differently. */
+  variant: string;
   year: number;
   topSpeedKph: number;
   accel0to100s: number;
@@ -32,7 +34,13 @@ export interface TrackData {
 
 export const cars: CarData[] = (carsJson as Omit<CarData, "id">[])
   .map((car) => ({ ...car, id: carSlug(car) }))
-  .sort((a, b) => a.make.localeCompare(b.make) || a.model.localeCompare(b.model));
+  .sort(
+    (a, b) =>
+      a.make.localeCompare(b.make) ||
+      a.model.localeCompare(b.model) ||
+      a.year - b.year ||
+      a.variant.localeCompare(b.variant),
+  );
 
 export const tracks: TrackData[] = trackDefs
   .map((track) => ({
@@ -44,8 +52,47 @@ export const tracks: TrackData[] = trackDefs
   }))
   .sort((a, b) => a.type.localeCompare(b.type) || a.lengthM - b.lengthM);
 
+export interface BrandData {
+  /** URL-safe id, e.g. "mercedes-benz" */
+  id: string;
+  name: string;
+  cars: CarData[];
+  /** Shown on the brand tile to hint at what the marque offers. */
+  maxPowerPs: number;
+  yearFrom: number;
+  yearTo: number;
+}
+
+const brandsById = new Map<string, BrandData>();
+for (const car of cars) {
+  const id = slugify(car.make);
+  let brand = brandsById.get(id);
+  if (!brand) {
+    brand = { id, name: car.make, cars: [], maxPowerPs: 0, yearFrom: car.year, yearTo: car.year };
+    brandsById.set(id, brand);
+  }
+  brand.cars.push(car);
+  brand.maxPowerPs = Math.max(brand.maxPowerPs, car.powerPs);
+  brand.yearFrom = Math.min(brand.yearFrom, car.year);
+  brand.yearTo = Math.max(brand.yearTo, car.year);
+}
+
+export const brands: BrandData[] = Array.from(brandsById.values()).sort((a, b) =>
+  a.name.localeCompare(b.name),
+);
+
+export function getBrand(id: string): BrandData | undefined {
+  return brandsById.get(id);
+}
+
+const carsById = new Map(cars.map((car) => [car.id, car]));
+
 export function getCar(id: string): CarData | undefined {
-  return cars.find((c) => c.id === id);
+  return carsById.get(id);
+}
+
+export function getCars(ids: string[]): CarData[] {
+  return ids.map(getCar).filter((car): car is CarData => car !== undefined);
 }
 
 export function getTrack(id: string): TrackData | undefined {

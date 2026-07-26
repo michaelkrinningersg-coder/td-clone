@@ -1,5 +1,8 @@
-import Link from "next/link";
+"use client";
+
 import type { CarData, StatRange, StatRanges } from "@/lib/data";
+import { raceColor } from "@/lib/race";
+import { useSelection } from "@/lib/selection";
 
 interface StatBarProps {
   label: string;
@@ -37,28 +40,51 @@ function StatBar({ label, value, range, unit, lowerIsBetter }: StatBarProps) {
   );
 }
 
-export interface CarCardProps {
-  car: CarData;
-  statRanges: StatRanges;
-  href: string;
-}
+export function CarCard({ car, statRanges }: { car: CarData; statRanges: StatRanges }) {
+  const { selectedIds, isSelected, toggle, isFull } = useSelection();
+  const selected = isSelected(car.id);
+  const gridPosition = selectedIds.indexOf(car.id);
+  const color = selected ? raceColor(gridPosition) : null;
+  const blocked = isFull && !selected;
 
-export function CarCard({ car, statRanges, href }: CarCardProps) {
   return (
-    <Link
-      href={href}
-      className="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4 transition-colors hover:border-emerald-600"
+    <button
+      type="button"
+      onClick={() => toggle(car.id)}
+      disabled={blocked}
+      aria-pressed={selected}
+      className={`flex flex-col gap-3 rounded-xl border bg-zinc-900 p-4 text-left transition-colors ${
+        selected
+          ? `${color!.border} ring-1 ${color!.ring}`
+          : blocked
+            ? "cursor-not-allowed border-zinc-800 opacity-40"
+            : "border-zinc-800 hover:border-emerald-600"
+      }`}
     >
-      <div>
-        <div className="text-xs uppercase tracking-wide text-zinc-500">
-          {car.make} · {car.year}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-zinc-500">
+            {car.make} · {car.year}
+          </div>
+          <div className="text-lg font-semibold text-white">{car.model}</div>
+          <div className="truncate text-xs text-zinc-400" title={car.variant}>
+            {car.variant}
+          </div>
+          <div className="mt-1 flex gap-2 text-xs text-zinc-500">
+            <span className="rounded bg-zinc-800 px-1.5 py-0.5">{car.drivetrain}</span>
+            <span className="rounded bg-zinc-800 px-1.5 py-0.5">{car.fuelType}</span>
+          </div>
         </div>
-        <div className="text-lg font-semibold text-white">{car.model}</div>
-        <div className="mt-1 flex gap-2 text-xs text-zinc-500">
-          <span className="rounded bg-zinc-800 px-1.5 py-0.5">{car.drivetrain}</span>
-          <span className="rounded bg-zinc-800 px-1.5 py-0.5">{car.fuelType}</span>
-        </div>
+        <span
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+            selected ? `${color!.bg} text-zinc-950` : "border border-zinc-700 text-transparent"
+          }`}
+          aria-hidden
+        >
+          {selected ? gridPosition + 1 : ""}
+        </span>
       </div>
+
       <div className="flex flex-col gap-1.5">
         <StatBar label="Top-Speed" value={car.topSpeedKph} range={statRanges.topSpeedKph} unit=" km/h" />
         <StatBar label="0-100" value={car.accel0to100s} range={statRanges.accel0to100s} unit="s" lowerIsBetter />
@@ -66,6 +92,6 @@ export function CarCard({ car, statRanges, href }: CarCardProps) {
         <StatBar label="Drehmoment" value={car.torqueNm} range={statRanges.torqueNm} unit=" Nm" />
         <StatBar label="Gewicht" value={car.weightKg} range={statRanges.weightKg} unit=" kg" lowerIsBetter />
       </div>
-    </Link>
+    </button>
   );
 }

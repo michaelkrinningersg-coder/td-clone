@@ -4,24 +4,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { buildTrackPath, pointAtDistance, toSvgPath } from "@/lib/track-geometry";
 import { interpolateTraceAtTime, simulateRun, type SimResult } from "@/lib/physics";
+import { playbackDurationMs, raceColor, rankRacers, type RacerProgress } from "@/lib/race";
 import { timeStore } from "@/lib/time-store";
 import { formatTimeMs } from "@/lib/format";
+import { LiveRanking } from "@/components/LiveRanking";
 import type { CarData, TrackData } from "@/lib/data";
 
 const PADDING = 20;
 const CHART_WIDTH = 600;
-const CHART_HEIGHT = 100;
+const CHART_HEIGHT = 110;
 
 type Phase = "idle" | "running" | "finished";
 
-interface Finish {
-  timeMs: number;
-  rank: number;
-  totalEntries: number;
-  entryId: string;
-}
-
-export function RaceRunner({ car, track }: { car: CarData; track: TrackData }) {
+export function RaceRunner({ cars, track }: { cars: CarData[]; track: TrackData }) {
   const path = useMemo(
     () => buildTrackPath(track.segments, Math.max(5, track.lengthM / 600)),
     [track],
@@ -31,14 +26,18 @@ export function RaceRunner({ car, track }: { car: CarData; track: TrackData }) {
   }`;
   const strokeWidth = Math.max(path.maxX - path.minX, path.maxY - path.minY, 1) / 120;
 
+  /** Every car is simulated up front; the animation is only a replay of results
+   * that already exist, which is what lets the ranking know each final time. */
+  const sims = useMemo<{ car: CarData; sim: SimResult }[]>(
+    () => cars.map((car) => ({ car, sim: simulateRun(car, track.segments) })),
+    [cars, track],
+  );
+  const slowestMs = Math.max(...sims.map((s) => s.sim.totalTimeMs));
+
   const [phase, setPhase] = useState<Phase>("idle");
-  const [sim, setSim] = useState<SimResult | null>(null);
-  const [finish, setFinish] = useState<Finish | null>(null);
+  const [simTimeS, setSimTimeS] = useState(0);
+  const [savedAt, setSavedAt] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [carPos, setCarPos] = useState(() => ({ x: path.points[0].x, y: path.points[0].y, heading: 0 }));
-  const [speedKph, setSpeedKph] = useState(0);
-  const [distanceM, setDistanceM] = useState(0);
-  const [timeS, setTimeS] = useState(0);
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -47,145 +46,178 @@ export function RaceRunner({ car, track }: { car: CarData; track: TrackData }) {
     };
   }, []);
 
+  // All cars share one clock, so a faster car visibly pulls away and crosses
+  // the line first instead of every car finishing together.
+  const progress: RacerProgress[] = sims.map(({ car, sim }, i) => {
+    const carTimeS = sim.totalTimeMs / 1000;
+    const tp = interpolateTraceAtTime(sim.trace, Math.min(simTimeS, carTimeS));
+    return {
+      carId: car.id,
+      gridIndex: i,
+      distanceM: tp.distanceM,
+      speedKph: simTimeS >= carTimeS ? 0 : tp.speedKph,
+      totalTimeMs: sim.totalTimeMs,
+      finished: simTimeS >= carTimeS,
+    };
+  });
+  const ranked = rankRacers(progress);
+
   function handleStart() {
     setError(null);
-    const result = simulateRun(car, track.segments);
-    setSim(result);
     setPhase("running");
-
-    const totalTimeS = result.totalTimeMs / 1000;
-    // Long tracks are played back compressed so a 17-minute hillclimb stays watchable.
-    const durationMs = Math.min(15000, Math.max(4000, result.totalTimeMs / 50));
-    // The first frame's timestamp is the clock - no need to sample a separate one.
+    const durationMs = playbackDurationMs(slowestMs);
     let start: number | null = null;
 
     function frame(now: number) {
       start ??= now;
       const p = Math.min(1, (now - start) / durationMs);
-      const tp = interpolateTraceAtTime(result.trace, p * totalTimeS);
-      setCarPos(pointAtDistance(path, tp.distanceM));
-      setSpeedKph(tp.speedKph);
-      setDistanceM(tp.distanceM);
-      setTimeS(p * totalTimeS);
-
+      setSimTimeS((p * slowestMs) / 1000);
       if (p < 1) {
         rafRef.current = requestAnimationFrame(frame);
       } else {
-        void persist(result);
+        void persist();
       }
     }
     rafRef.current = requestAnimationFrame(frame);
   }
 
-  async function persist(result: SimResult) {
+  async function persist() {
     try {
-      const saved = await timeStore.saveRun(car.id, track.id, result.totalTimeMs);
-      setFinish({
-        timeMs: result.totalTimeMs,
-        rank: saved.rank,
-        totalEntries: saved.totalEntries,
-        entryId: saved.entry.id,
-      });
+      for (const { car, sim } of sims) {
+        await timeStore.saveRun(car.id, track.id, sim.totalTimeMs);
+      }
+      setSavedAt(Date.now());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Zeit konnte nicht gespeichert werden.");
-      setFinish({ timeMs: result.totalTimeMs, rank: 0, totalEntries: 0, entryId: "" });
+      setError(err instanceof Error ? err.message : "Zeiten konnten nicht gespeichert werden.");
     } finally {
       setPhase("finished");
     }
   }
 
-  const maxTraceSpeed = sim ? Math.max(1, ...sim.trace.map((p) => p.speedKph)) : 1;
-  const chartPoints = sim
-    ? sim.trace
-        .map((p) => {
-          const x = (p.distanceM / track.lengthM) * CHART_WIDTH;
-          const y = CHART_HEIGHT - (p.speedKph / maxTraceSpeed) * CHART_HEIGHT;
-          return `${x.toFixed(1)},${y.toFixed(1)}`;
-        })
-        .join(" ")
-    : "";
-  const progressX = (distanceM / track.lengthM) * CHART_WIDTH;
+  const maxTraceSpeed = Math.max(1, ...sims.flatMap(({ sim }) => sim.trace.map((p) => p.speedKph)));
 
   return (
     <div className="mt-6 flex flex-col gap-6">
-      <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-        <svg viewBox={viewBox} className="h-72 w-full text-zinc-700">
-          <path
-            d={toSvgPath(path)}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <circle cx={carPos.x} cy={carPos.y} r={strokeWidth * 3} className="fill-emerald-400" />
-        </svg>
-      </div>
+      <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
+        <div className="flex flex-col gap-4">
+          <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <svg viewBox={viewBox} className="h-96 w-full text-zinc-700">
+              <path
+                d={toSvgPath(path)}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {progress.map((racer) => {
+                const pos = pointAtDistance(path, racer.distanceM);
+                return (
+                  <circle
+                    key={racer.carId}
+                    cx={pos.x}
+                    cy={pos.y}
+                    r={strokeWidth * 3}
+                    fill={raceColor(racer.gridIndex).hex}
+                    stroke="#09090b"
+                    strokeWidth={strokeWidth * 0.6}
+                  />
+                );
+              })}
+            </svg>
+          </div>
 
-      <div className="flex flex-wrap items-center gap-8 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-        <div>
-          <div className="text-xs uppercase tracking-wide text-zinc-500">Tempo</div>
-          <div className="font-mono text-3xl font-bold text-white">{speedKph.toFixed(0)} km/h</div>
-        </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide text-zinc-500">Zeit</div>
-          <div className="font-mono text-3xl font-bold text-white">{formatTimeMs(timeS * 1000)}</div>
-        </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide text-zinc-500">Distanz</div>
-          <div className="font-mono text-3xl font-bold text-white">
-            {(distanceM / 1000).toFixed(2)} / {(track.lengthM / 1000).toFixed(2)} km
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-zinc-500">
+              <span>Geschwindigkeit über die Strecke</span>
+              <span className="font-mono text-zinc-400">{formatTimeMs(simTimeS * 1000)}</span>
+            </div>
+            <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="h-28 w-full">
+              {sims.map(({ car, sim }, i) => (
+                <polyline
+                  key={car.id}
+                  points={sim.trace
+                    .map(
+                      (p) =>
+                        `${((p.distanceM / track.lengthM) * CHART_WIDTH).toFixed(1)},${(
+                          CHART_HEIGHT -
+                          (p.speedKph / maxTraceSpeed) * CHART_HEIGHT
+                        ).toFixed(1)}`,
+                    )
+                    .join(" ")}
+                  fill="none"
+                  stroke={raceColor(i).hex}
+                  strokeWidth={1.5}
+                  opacity={0.9}
+                />
+              ))}
+              {phase !== "idle" &&
+                ranked.map((racer) => {
+                  const x = (racer.distanceM / track.lengthM) * CHART_WIDTH;
+                  return (
+                    <line
+                      key={racer.carId}
+                      x1={x}
+                      x2={x}
+                      y1={0}
+                      y2={CHART_HEIGHT}
+                      stroke={raceColor(racer.gridIndex).hex}
+                      strokeWidth={1}
+                      opacity={0.35}
+                    />
+                  );
+                })}
+            </svg>
           </div>
         </div>
-      </div>
 
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-        <div className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Geschwindigkeit über die Strecke</div>
-        <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="h-24 w-full">
-          {sim && <polyline points={chartPoints} fill="none" stroke="#34d399" strokeWidth={2} />}
-          {phase === "running" && (
-            <line x1={progressX} x2={progressX} y1={0} y2={CHART_HEIGHT} stroke="#f59e0b" strokeWidth={2} />
-          )}
-        </svg>
-      </div>
-
-      {phase === "idle" && (
-        <button
-          onClick={handleStart}
-          className="self-start rounded-full bg-emerald-500 px-6 py-3 font-semibold text-zinc-950 hover:bg-emerald-400"
-        >
-          Fahrt starten
-        </button>
-      )}
-
-      {phase === "finished" && finish && (
-        <div className="rounded-xl border border-emerald-700 bg-emerald-950/40 p-6">
-          <div className="text-sm text-zinc-400">Ziel erreicht!</div>
-          <div className="mt-1 font-mono text-4xl font-bold text-white">{formatTimeMs(finish.timeMs)}</div>
-          {error ? (
-            <div className="mt-2 text-amber-400">{error}</div>
-          ) : (
-            <div className="mt-2 text-zinc-300">
-              Platz <span className="font-semibold text-white">{finish.rank}</span> von{" "}
-              <span className="font-semibold text-white">{finish.totalEntries}</span> auf {track.name}
-            </div>
-          )}
-          <div className="mt-4 flex gap-3">
-            <Link
-              href={`/leaderboard/${track.id}?highlight=${finish.entryId}`}
+        <div className="flex flex-col gap-4">
+          {phase === "idle" && (
+            <button
+              onClick={handleStart}
               className="rounded-full bg-emerald-500 px-6 py-3 font-semibold text-zinc-950 hover:bg-emerald-400"
             >
-              Rangliste ansehen
-            </Link>
-            <Link
-              href="/"
-              className="rounded-full border border-zinc-700 px-6 py-3 font-semibold text-zinc-300 hover:border-zinc-500"
-            >
-              Neues Auto
-            </Link>
-          </div>
+              Rennen starten
+            </button>
+          )}
+
+          <LiveRanking ranked={ranked} cars={cars} track={track} savedAt={savedAt} />
+
+          {phase === "finished" && (
+            <div className="rounded-xl border border-emerald-700 bg-emerald-950/40 p-5">
+              <div className="text-sm text-zinc-400">Zieleinlauf</div>
+              <div className="mt-1 text-xl font-bold text-white">
+                {(() => {
+                  const winner = cars.find((c) => c.id === ranked[0]?.carId);
+                  return winner ? `${winner.make} ${winner.model}` : "—";
+                })()}
+              </div>
+              <div className="font-mono text-2xl text-emerald-400">{formatTimeMs(ranked[0]?.totalTimeMs ?? 0)}</div>
+              {error && <p className="mt-2 text-amber-400">{error}</p>}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link
+                  href={`/leaderboard/${track.id}`}
+                  className="rounded-full bg-emerald-500 px-5 py-2 font-semibold text-zinc-950 hover:bg-emerald-400"
+                >
+                  Rangliste
+                </Link>
+                <Link
+                  href="/tracks"
+                  className="rounded-full border border-zinc-700 px-5 py-2 font-semibold text-zinc-300 hover:border-zinc-500"
+                >
+                  Andere Strecke
+                </Link>
+                <Link
+                  href="/"
+                  className="rounded-full border border-zinc-700 px-5 py-2 font-semibold text-zinc-300 hover:border-zinc-500"
+                >
+                  Autos ändern
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

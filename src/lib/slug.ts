@@ -11,8 +11,10 @@ export function slugify(...parts: (string | number)[]): string {
     .replace(/^-|-$/g, "");
 }
 
-export function carSlug(car: { make: string; model: string; year: number }): string {
-  return slugify(car.make, car.model, car.year);
+/** The variant is part of the identity: one model year can offer several engine
+ * variants that differ in performance, and each races differently. */
+export function carSlug(car: { make: string; model: string; year: number; variant?: string }): string {
+  return slugify(car.make, car.model, car.year, car.variant ?? "");
 }
 
 export function trackSlug(track: { name: string }): string {

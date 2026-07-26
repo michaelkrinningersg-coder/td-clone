@@ -11,7 +11,8 @@ import {
   parseTopSpeedKph,
   parseTorqueNm,
   parseWeightKg,
-  pickRepresentativeVariants,
+  cleanVariant,
+  dedupeVariants,
   type ImportedCar,
   type RawEngine,
 } from "./car-import";
@@ -44,6 +45,7 @@ describe("convertEngine", () => {
     assert.deepEqual(convertEngine(completeEngine, automobile, brand), {
       make: "Audi",
       model: "S4",
+      variant: "3.5L V8 32V Turbo 6MT",
       year: 2005,
       topSpeedKph: 249,
       accel0to100s: 5.6,
@@ -225,42 +227,69 @@ describe("parseModelAndYear", () => {
   });
 });
 
-describe("pickRepresentativeVariants", () => {
-  const car = (model: string, year: number, powerPs: number): ImportedCar => ({
+describe("dedupeVariants", () => {
+  const car = (over: Partial<ImportedCar>): ImportedCar => ({
     make: "SEAT",
-    model,
-    year,
-    powerPs,
+    model: "Leon",
+    variant: "1.4 TSI",
+    year: 2020,
+    powerPs: 150,
     topSpeedKph: 250,
     accel0to100s: 5,
     weightKg: 1500,
     torqueNm: 400,
     drivetrain: "RWD",
     fuelType: "Gasoline",
+    ...over,
   });
 
-  it("keeps the most powerful variant of a car", () => {
-    const result = pickRepresentativeVariants([car("Leon", 2020, 150), car("Leon", 2020, 300), car("Leon", 2020, 190)]);
+  // Variants that drive differently are different cars in the game.
+  it("keeps variants whose performance differs", () => {
+    const result = dedupeVariants([
+      car({ variant: "1.4 TSI", powerPs: 150 }),
+      car({ variant: "2.0 TSI", powerPs: 300 }),
+    ]);
+    assert.equal(result.length, 2);
+  });
+
+  // Three gearboxes with identical figures are three identical cars to choose
+  // between, which is only noise.
+  it("collapses variants that drive identically", () => {
+    const result = dedupeVariants([
+      car({ variant: "2.0 TSI 6MT" }),
+      car({ variant: "2.0 TSI 7DSG" }),
+      car({ variant: "2.0 TSI 6AT" }),
+    ]);
     assert.equal(result.length, 1);
-    assert.equal(result[0].powerPs, 300);
   });
 
-  it("treats different years as different cars", () => {
-    assert.equal(pickRepresentativeVariants([car("Leon", 2020, 150), car("Leon", 2021, 150)]).length, 2);
+  it("separates different model years", () => {
+    assert.equal(dedupeVariants([car({ year: 2020 }), car({ year: 2021 })]).length, 2);
   });
 
-  // Two names that differ only in punctuation slugify to one id; letting both
-  // through would mean two cars sharing an id, and the second silently
-  // overwriting the first when seeded.
-  it("collapses names that would share an id", () => {
-    const result = pickRepresentativeVariants([car("Ibiza 5 doors", 2017, 150), car("Ibiza 5-doors", 2017, 110)]);
-    assert.equal(result.length, 1);
-    assert.equal(result[0].powerPs, 150);
+  it("treats any differing stat as a different car", () => {
+    for (const over of [
+      { topSpeedKph: 260 },
+      { accel0to100s: 4.5 },
+      { weightKg: 1400 },
+      { torqueNm: 420 },
+      { drivetrain: "AWD" as const },
+      { fuelType: "Diesel" },
+    ]) {
+      const result = dedupeVariants([car({ variant: "a" }), car({ variant: "b", ...over })]);
+      assert.equal(result.length, 2, `expected ${JSON.stringify(over)} to count as a different car`);
+    }
   });
 
+  // Two cars sharing an id would mean duplicate React keys and one silently
+  // overwriting the other when seeded.
   it("never returns two cars with the same id", () => {
-    const cars = [car("Ibiza 5 doors", 2017, 150), car("Ibiza 5-doors", 2017, 110), car("Leon", 2020, 190)];
-    const ids = pickRepresentativeVariants(cars).map(carSlug);
+    const result = dedupeVariants([
+      car({ model: "Ibiza 5 doors", variant: "1.0 TSI", powerPs: 95 }),
+      car({ model: "Ibiza 5-doors", variant: "1.0 TSI", powerPs: 110 }),
+      car({ variant: "2.0 TSI", powerPs: 300 }),
+    ]);
+    const ids = result.map(carSlug);
     assert.equal(new Set(ids).size, ids.length);
   });
 });
@@ -269,6 +298,7 @@ describe("isPlausible", () => {
   const base: ImportedCar = {
     make: "Audi",
     model: "S4",
+    variant: "4.2 V8",
     year: 2005,
     topSpeedKph: 249,
     accel0to100s: 5.6,
@@ -288,5 +318,22 @@ describe("isPlausible", () => {
     assert.equal(isPlausible({ ...base, accel0to100s: 0.2 }), false);
     assert.equal(isPlausible({ ...base, weightKg: 12 }), false);
     assert.equal(isPlausible({ ...base, powerPs: 9000 }), false);
+  });
+});
+
+describe("cleanVariant", () => {
+  it("drops the trailing power, which the card already shows as a number", () => {
+    assert.equal(cleanVariant("3.5L V8 32V Turbo 6MT (354 HP)"), "3.5L V8 32V Turbo 6MT");
+    assert.equal(cleanVariant("2.0 TDI (150 hp)"), "2.0 TDI");
+    assert.equal(cleanVariant("Electric (408 kW)"), "Electric");
+  });
+
+  it("leaves a variant without a power suffix alone", () => {
+    assert.equal(cleanVariant("1.6 HDi 8V"), "1.6 HDi 8V");
+  });
+
+  it("returns null when there is nothing left", () => {
+    assert.equal(cleanVariant(undefined), null);
+    assert.equal(cleanVariant("  "), null);
   });
 });

@@ -30,6 +30,9 @@ export interface RawBrand {
 export interface ImportedCar {
   make: string;
   model: string;
+  /** The engine variant, e.g. "3.5L V8 32V Turbo 6MT". Part of the identity,
+   * since variants of one model year differ in how they drive. */
+  variant: string;
   year: number;
   topSpeedKph: number;
   accel0to100s: number;
@@ -195,6 +198,16 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Engine names read like "3.5L V8 32V Turbo 6MT (354 HP)". The trailing power
+ * is dropped because the card already shows it as a real number. */
+export function cleanVariant(rawName: string | undefined): string | null {
+  const cleaned = rawName
+    ?.replace(/\(\s*[\d.]+\s*(hp|bhp|ps|kw)\s*\)/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned ? cleaned : null;
+}
+
 /** Builds a car from one engine variant, or returns null if ANY required value
  * is missing. Dropping the car is deliberate: every car in the game must carry
  * the same real, measured stats rather than estimated stand-ins. */
@@ -208,6 +221,9 @@ export function convertEngine(
 
   const modelYear = parseModelAndYear(automobile?.name, make);
   if (!modelYear) return null;
+
+  const variant = cleanVariant(engine.name);
+  if (!variant) return null;
 
   const powerPs = parsePowerPs(spec(engine, SPEC_FIELDS.power));
   const torqueNm = parseTorqueNm(spec(engine, SPEC_FIELDS.torque));
@@ -234,6 +250,7 @@ export function convertEngine(
   return {
     make,
     model: modelYear.model,
+    variant,
     year: modelYear.year,
     topSpeedKph,
     accel0to100s,
@@ -245,21 +262,50 @@ export function convertEngine(
   };
 }
 
-/** Keeps the most powerful variant per car, so a single model does not fill the
- * game with a dozen near-identical entries.
+/** The values that decide how a car actually drives. Two variants sharing all
+ * of these would be the same car in the game, whatever the badge says. */
+export function performanceSignature(car: ImportedCar): string {
+  return [
+    car.topSpeedKph,
+    car.accel0to100s,
+    car.powerPs,
+    car.weightKg,
+    car.torqueNm,
+    car.drivetrain,
+    car.fuelType,
+  ].join("|");
+}
+
+/** Keeps every variant that races differently, and collapses the ones that do
+ * not - a model year listed with three gearboxes but identical figures adds
+ * three identical cars to choose between, which is only noise.
  *
- * Deduplication is keyed on the car's slug rather than make/model/year, because
- * the slug is what the app uses as the car's id. Names that differ only in
- * punctuation ("Ibiza 5 doors" vs "Ibiza 5-doors") produce the same slug, and
- * letting both through would mean two cars sharing one id. */
-export function pickRepresentativeVariants(cars: ImportedCar[]): ImportedCar[] {
-  const best = new Map<string, ImportedCar>();
+ * Ids are checked for collisions as a last step: names differing only in
+ * punctuation ("Ibiza 5 doors" vs "Ibiza 5-doors") slug to the same string, and
+ * two cars sharing an id would mean duplicate React keys and one silently
+ * overwriting the other when seeded. */
+export function dedupeVariants(cars: ImportedCar[]): ImportedCar[] {
+  const distinct = new Map<string, ImportedCar>();
   for (const car of cars) {
-    const key = carSlug(car);
-    const existing = best.get(key);
-    if (!existing || car.powerPs > existing.powerPs) best.set(key, car);
+    const key = `${car.make}|${car.model}|${car.year}|${performanceSignature(car)}`;
+    const existing = distinct.get(key);
+    // Prefer the shorter variant label; they describe the same car anyway.
+    if (!existing || car.variant.length < existing.variant.length) distinct.set(key, car);
   }
-  return Array.from(best.values());
+
+  const used = new Set<string>();
+  const result: ImportedCar[] = [];
+  for (const car of distinct.values()) {
+    let candidate = car;
+    let slug = carSlug(candidate);
+    for (let n = 2; used.has(slug); n++) {
+      candidate = { ...car, variant: `${car.variant} (${n})` };
+      slug = carSlug(candidate);
+    }
+    used.add(slug);
+    result.push(candidate);
+  }
+  return result;
 }
 
 /** Guards against obviously broken source rows (a 5000 kg "sports car", a

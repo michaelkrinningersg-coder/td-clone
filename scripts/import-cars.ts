@@ -16,7 +16,7 @@ import { unzipSync, strFromU8 } from "fflate";
 import {
   convertEngine,
   isPlausible,
-  pickRepresentativeVariants,
+  dedupeVariants,
   type ImportedCar,
   type RawAutomobile,
   type RawBrand,
@@ -65,10 +65,14 @@ async function main() {
     complete.push(car);
   }
 
-  const representative = pickRepresentativeVariants(complete);
+  const representative = dedupeVariants(complete);
   const selected = [...representative].sort((a, b) => b.powerPs - a.powerPs).slice(0, MAX_CARS);
   const cars = selected.sort(
-    (a, b) => a.make.localeCompare(b.make) || a.model.localeCompare(b.model) || a.year - b.year,
+    (a, b) =>
+      a.make.localeCompare(b.make) ||
+      a.model.localeCompare(b.model) ||
+      a.year - b.year ||
+      a.variant.localeCompare(b.variant),
   );
 
   const outPath = join(__dirname, "..", "src", "data", "cars.json");
@@ -78,7 +82,7 @@ async function main() {
     [
       `${engines.length} variants considered`,
       `${complete.length} had complete, plausible data (${implausible} dropped as implausible)`,
-      `${representative.length} after one variant per model/year`,
+      `${representative.length} after collapsing variants that drive identically`,
       `${cars.length} written${Number.isFinite(MAX_CARS) ? ` (MAX_CARS=${MAX_CARS})` : ""}`,
     ].join("\n  -> "),
   );
