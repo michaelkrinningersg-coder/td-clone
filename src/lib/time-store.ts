@@ -35,6 +35,9 @@ export function isImprovement(previousMs: number, candidateMs: number): boolean 
 export interface TimeStore {
   saveRun(carId: string, trackId: string, timeMs: number): Promise<SaveResult>;
   getLeaderboard(trackId: string): Promise<TimeEntryData[]>;
+  /** Drops a single recorded time. Nothing else references an entry, so the
+   * board simply re-ranks around the gap. */
+  deleteEntry(entryId: string): Promise<void>;
 }
 
 const STORAGE_KEY = "td-clone:times";
@@ -90,6 +93,10 @@ const localStorageStore: TimeStore = {
       .filter((e) => e.trackId === trackId)
       .sort((a, b) => a.timeMs - b.timeMs);
   },
+
+  async deleteEntry(entryId) {
+    writeAll(readAll().filter((e) => e.id !== entryId));
+  },
 };
 
 const apiStore: TimeStore = {
@@ -107,6 +114,11 @@ const apiStore: TimeStore = {
     const res = await fetch(`/api/tracks/${trackId}/leaderboard`);
     if (!res.ok) throw new Error(`Rangliste laden fehlgeschlagen: ${res.status}`);
     return (await res.json()) as TimeEntryData[];
+  },
+
+  async deleteEntry(entryId) {
+    const res = await fetch(`/api/runs?id=${encodeURIComponent(entryId)}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`Löschen fehlgeschlagen: ${res.status}`);
   },
 };
 

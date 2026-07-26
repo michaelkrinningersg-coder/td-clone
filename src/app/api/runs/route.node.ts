@@ -61,3 +61,14 @@ export async function POST(req: Request) {
     improved,
   });
 }
+
+/** Local-dev only, see the POST handler above. */
+export async function DELETE(req: Request) {
+  const id = new URL(req.url).searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "id ist erforderlich" }, { status: 400 });
+
+  const deleted = await prisma.timeEntry.deleteMany({ where: { id } });
+  if (deleted.count === 0) return NextResponse.json({ error: "Eintrag nicht gefunden" }, { status: 404 });
+
+  return NextResponse.json({ deleted: deleted.count });
+}

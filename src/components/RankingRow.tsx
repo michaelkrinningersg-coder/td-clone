@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { CarData } from "@/lib/data";
 import { raceColor } from "@/lib/race";
 
@@ -19,6 +20,7 @@ export function RankingRow({
   progressPercent,
   highlighted,
   podiumClass,
+  onDelete,
 }: {
   car: CarData | undefined;
   /** Shown when the car is no longer in the dataset. */
@@ -36,8 +38,24 @@ export function RankingRow({
   highlighted?: boolean;
   /** Colours the position for places 1-3 on boards that have no grid colours. */
   podiumClass?: string;
+  /** When given, the row offers to delete its recorded time. */
+  onDelete?: () => void | Promise<void>;
 }) {
   const color = gridIndex >= 0 ? raceColor(gridIndex) : null;
+  // Deleting a time cannot be undone, so the × only arms the row and a second,
+  // differently-worded button does the deed.
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function remove() {
+    setBusy(true);
+    try {
+      await onDelete?.();
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  }
 
   return (
     <li
@@ -79,6 +97,35 @@ export function RankingRow({
         >
           {position === null ? "–" : `${position}.`}
         </span>
+
+        {onDelete &&
+          (confirming ? (
+            <span className="flex shrink-0 items-center gap-1">
+              <button
+                onClick={remove}
+                disabled={busy}
+                className="rounded-full bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+              >
+                {busy ? "..." : "Löschen"}
+              </button>
+              <button
+                onClick={() => setConfirming(false)}
+                disabled={busy}
+                className="rounded-full px-2 py-1 text-xs text-zinc-400 hover:text-white"
+              >
+                Abbrechen
+              </button>
+            </span>
+          ) : (
+            <button
+              onClick={() => setConfirming(true)}
+              aria-label="Eintrag aus der Rangliste entfernen"
+              title="Eintrag entfernen"
+              className="shrink-0 rounded-full px-2 py-0.5 text-zinc-600 hover:bg-zinc-800 hover:text-white"
+            >
+              ×
+            </button>
+          ))}
       </div>
     </li>
   );

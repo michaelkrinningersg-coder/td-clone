@@ -6,6 +6,7 @@ import { getCar, type TrackData } from "@/lib/data";
 import { buildTrackPath, toSvgPath } from "@/lib/track-geometry";
 import { formatTimeMs } from "@/lib/format";
 import { useTrackTimes } from "@/lib/use-track-times";
+import { timeStore } from "@/lib/time-store";
 import { RankingRow } from "@/components/RankingRow";
 
 const PADDING = 20;
@@ -14,7 +15,7 @@ const PADDING = 20;
 const PODIUM = ["text-amber-300", "text-zinc-300", "text-orange-400"];
 
 export function TrackLeaderboard({ track, highlight }: { track: TrackData; highlight?: string }) {
-  const { entries } = useTrackTimes(track.id);
+  const { entries, reload } = useTrackTimes(track.id);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
 
@@ -115,6 +116,10 @@ export function TrackLeaderboard({ track, highlight }: { track: TrackData; highl
               }
               highlighted={entry.id === highlight}
               podiumClass={position <= 3 ? PODIUM[position - 1] : undefined}
+              onDelete={async () => {
+                await timeStore.deleteEntry(entry.id);
+                reload();
+              }}
             />
           ))}
         </ol>
