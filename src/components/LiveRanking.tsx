@@ -152,7 +152,7 @@ function OverallView({ ranked, track, savedAt }: { ranked: RankedRacer[]; track:
   const overallPositionOf = new Map(entries.map((entry, i) => [entry.carId, i + 1]));
 
   return (
-    <div className="max-h-[44rem] overflow-y-auto">
+    <div className="max-h-[132rem] overflow-y-auto">
       {/* The cars in this race stay pinned at the top in their current running
           order, so they never scroll out of sight - while still appearing in
           their real place in the board below once they have a time. */}

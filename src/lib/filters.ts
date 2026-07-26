@@ -15,6 +15,9 @@ export interface CarFilter {
   powerToWeight: Range;
   /** Class ids; empty means "any", like the other tick lists. */
   classes: string[];
+  /** Decades as their first year, e.g. 1990 for 1990-1999. Quicker to reach
+   * than the year range and, unlike it, not limited to one span. */
+  decades: number[];
   /** Empty means "any" rather than "none" - an empty set of ticks is the
    * unfiltered state, which is what an untouched filter panel shows. */
   drivetrains: Drivetrain[];
@@ -32,10 +35,16 @@ export const EMPTY_FILTER: CarFilter = {
   year: EMPTY_RANGE,
   powerToWeight: EMPTY_RANGE,
   classes: [],
+  decades: [],
   drivetrains: [],
   fuelTypes: [],
   onlyWithoutTime: false,
 };
+
+/** The decade a year belongs to, as its first year. */
+export function decadeOf(year: number): number {
+  return Math.floor(year / 10) * 10;
+}
 
 function inRange(value: number, range: Range): boolean {
   if (range.min !== null && value < range.min) return false;
@@ -52,6 +61,7 @@ export function matchesFilter(car: CarData, filter: CarFilter, timedCarIds?: Rea
   if (!inRange(car.year, filter.year)) return false;
   if (!inRange(powerToWeight(car), filter.powerToWeight)) return false;
   if (filter.classes.length > 0 && !filter.classes.includes(carClassOf(car).id)) return false;
+  if (filter.decades.length > 0 && !filter.decades.includes(decadeOf(car.year))) return false;
   if (filter.drivetrains.length > 0 && !filter.drivetrains.includes(car.drivetrain)) return false;
   if (filter.fuelTypes.length > 0 && !filter.fuelTypes.includes(car.fuelType)) return false;
   if (filter.onlyWithoutTime && timedCarIds?.has(car.id)) return false;
@@ -71,6 +81,7 @@ export function isFilterActive(filter: CarFilter): boolean {
     filter.powerToWeight.min !== null ||
     filter.powerToWeight.max !== null ||
     filter.classes.length > 0 ||
+    filter.decades.length > 0 ||
     filter.drivetrains.length > 0 ||
     filter.fuelTypes.length > 0 ||
     filter.onlyWithoutTime
@@ -90,6 +101,7 @@ export function activeFilterCount(filter: CarFilter): number {
     if (range.min !== null || range.max !== null) n++;
   }
   if (filter.classes.length > 0) n++;
+  if (filter.decades.length > 0) n++;
   if (filter.drivetrains.length > 0) n++;
   if (filter.fuelTypes.length > 0) n++;
   if (filter.onlyWithoutTime) n++;

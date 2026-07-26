@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   activeFilterCount,
   EMPTY_FILTER,
+  decadeOf,
   isFilterActive,
   matchesFilter,
   type CarFilter,
@@ -123,6 +124,31 @@ describe("power-to-weight and class", () => {
 
   it("treats no ticked class as any class", () => {
     assert.equal(matchesFilter(car, filter({ classes: [] })), true);
+  });
+});
+
+describe("decades", () => {
+  it("maps a year to the decade it starts", () => {
+    assert.equal(decadeOf(2005), 2000);
+    assert.equal(decadeOf(1999), 1990);
+    assert.equal(decadeOf(2020), 2020);
+  });
+
+  // The S4 is a 2005 car.
+  it("keeps a car whose decade is ticked", () => {
+    assert.equal(matchesFilter(car, filter({ decades: [2000] })), true);
+  });
+
+  it("drops a car from an untouched decade", () => {
+    assert.equal(matchesFilter(car, filter({ decades: [1990, 2010] })), false);
+  });
+
+  it("accepts any of several ticked decades", () => {
+    assert.equal(matchesFilter(car, filter({ decades: [1990, 2000, 2010] })), true);
+  });
+
+  it("treats no ticked decade as any decade", () => {
+    assert.equal(matchesFilter(car, filter({ decades: [] })), true);
   });
 });
 

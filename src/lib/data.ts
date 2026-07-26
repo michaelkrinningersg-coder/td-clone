@@ -133,6 +133,12 @@ export const statRanges = {
   powerToWeight: rangeOf((c) => c.weightKg / c.powerPs),
 };
 
+/** Every decade the field covers, oldest first, so the filter offers exactly
+ * what exists rather than a fixed list of decades. */
+export const decades: number[] = Array.from(
+  new Set(cars.map((c) => Math.floor(c.year / 10) * 10)),
+).sort((a, b) => a - b);
+
 /** Every fuel type present, so the filter offers exactly what exists. */
 export const fuelTypes: string[] = Array.from(new Set(cars.map((c) => c.fuelType))).sort((a, b) =>
   a.localeCompare(b),

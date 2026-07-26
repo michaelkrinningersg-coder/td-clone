@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { activeFilterCount, type CarFilter, type Range } from "@/lib/filters";
-import { statRanges } from "@/lib/data";
+import { decades, statRanges } from "@/lib/data";
 import type { Drivetrain } from "@/lib/physics";
 import { carClasses, classRangeLabel, getCarClass } from "@/lib/classes";
 
@@ -89,6 +89,14 @@ export function CarFilters({
             onChange={(powerToWeight) => onChange({ ...filter, powerToWeight })}
           />
 
+          <ChipGroup
+            label="Jahrzehnt"
+            options={decades.map(String)}
+            optionLabel={(d) => `${d.slice(2)}er`}
+            optionTitle={(d) => `${d} bis ${Number(d) + 9}`}
+            selected={filter.decades.map(String)}
+            onChange={(ds) => onChange({ ...filter, decades: ds.map(Number) })}
+          />
           <ChipGroup
             label="Klasse"
             options={carClasses.map((c) => c.id)}
