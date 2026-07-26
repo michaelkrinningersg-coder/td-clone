@@ -8,6 +8,7 @@ import { playbackDurationMs, raceColor, rankRacers, type RacerProgress } from "@
 import { timeStore } from "@/lib/time-store";
 import { formatTimeMs } from "@/lib/format";
 import { LiveRanking } from "@/components/LiveRanking";
+import { SectorTimes } from "@/components/SectorTimes";
 import type { CarData, TrackData } from "@/lib/data";
 
 const PADDING = 20;
@@ -184,6 +185,8 @@ export function RaceRunner({ cars, track }: { cars: CarData[]; track: TrackData 
             })}
         </svg>
       </div>
+
+      {phase === "finished" && <SectorTimes runs={sims} />}
 
       {phase === "finished" && (
         <div className="rounded-xl border border-emerald-700 bg-emerald-950/40 p-5">
