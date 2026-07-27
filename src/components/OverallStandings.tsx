@@ -5,7 +5,13 @@ import Link from "next/link";
 import { getCar, tracks } from "@/lib/data";
 import { brandColor } from "@/lib/brand-colors";
 import { formatDurationMs } from "@/lib/format";
-import { buildStandings, hasMixedTrackCounts, sortStandings, type StandingsOrder } from "@/lib/standings";
+import {
+  buildStandings,
+  hasMixedTrackCounts,
+  onlyMostTracks,
+  sortStandings,
+  type StandingsOrder,
+} from "@/lib/standings";
 import { timeStore, type TimeEntryData } from "@/lib/time-store";
 import { ResetButton } from "@/components/ResetButton";
 import { MakeStandings } from "@/components/MakeStandings";
@@ -26,7 +32,7 @@ const ORDERS: { id: StandingsOrder; label: string; hint: string }[] = [
   {
     id: "time",
     label: "Gesamtzeit",
-    hint: "Alle gefahrenen Zeiten addiert, kürzeste zuerst.",
+    hint: "Alle gefahrenen Zeiten addiert, kürzeste zuerst. Nur Autos mit gleich vielen Strecken — alles andere wäre kein Vergleich.",
   },
 ];
 
@@ -52,10 +58,13 @@ export function OverallStandings() {
   }, [nonce]);
 
   const standings = useMemo(() => (entries ? buildStandings(entries) : null), [entries]);
-  const ordered = useMemo(
-    () => (standings ? sortStandings(standings, order) : null),
-    [standings, order],
-  );
+  // The total-time table only compares like with like, so it drops every car
+  // that has not covered as much ground as the leaders.
+  const ordered = useMemo(() => {
+    if (!standings) return null;
+    const eligible = order === "time" ? onlyMostTracks(standings) : standings;
+    return sortStandings(eligible, order);
+  }, [standings, order]);
   const tracksWithTimes = useMemo(
     () => new Set(entries?.map((e) => e.trackId) ?? []).size,
     [entries],
@@ -127,8 +136,12 @@ export function OverallStandings() {
 
       {order === "time" && uneven && (
         <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-          Nicht alle Autos sind gleich viele Strecken gefahren. Eine Gesamtzeit ist nur zwischen Autos
-          aussagekräftig, die dieselben Strecken hinter sich haben — die abweichenden sind unten markiert.
+          {mostTracks === tracks.length
+            ? `Nur die ${ordered.length} ${ordered.length === 1 ? "Auto, das" : "Autos, die"} alle ${tracks.length} Strecken gefahren ${ordered.length === 1 ? "ist" : "sind"}.`
+            : `Noch ist kein Auto alle ${tracks.length} Strecken gefahren. Gezeigt werden die ${ordered.length} mit den meisten, also je ${mostTracks} ${mostTracks === 1 ? "Strecke" : "Strecken"}.`}{" "}
+          {standings.length - ordered.length} von {standings.length} Autos{" "}
+          {standings.length - ordered.length === 1 ? "ist" : "sind"} ausgeblendet — eine Gesamtzeit über
+          unterschiedlich viele Strecken wäre kein Vergleich.
         </p>
       )}
 
@@ -180,20 +193,7 @@ export function OverallStandings() {
                       standing.carId
                     )}
                   </td>
-                  <td
-                    className={`px-3 py-2 text-right font-mono ${
-                      order === "time" && uneven && standing.raced < mostTracks
-                        ? "text-amber-300"
-                        : "text-zinc-400"
-                    }`}
-                    title={
-                      order === "time" && standing.raced < mostTracks
-                        ? `Nur ${standing.raced} von ${mostTracks} Strecken — Gesamtzeit nicht direkt vergleichbar`
-                        : undefined
-                    }
-                  >
-                    {standing.raced}
-                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-zinc-400">{standing.raced}</td>
                   <td className="px-3 py-2 text-right font-mono text-zinc-400">{standing.wins}</td>
                   <td className="px-3 py-2 text-right font-mono text-zinc-400">{standing.podiums}</td>
                   <td className="px-3 py-2 text-right font-mono text-zinc-400">

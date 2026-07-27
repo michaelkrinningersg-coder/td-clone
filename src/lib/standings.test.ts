@@ -4,6 +4,7 @@ import {
   buildMakeStandings,
   buildStandings,
   hasMixedTrackCounts,
+  onlyMostTracks,
   pointsForPosition,
   sortStandings,
 } from "./standings";
@@ -265,6 +266,49 @@ describe("buildMakeStandings", () => {
 
   it("returns nothing when nothing has been raced", () => {
     assert.deepEqual(buildMakeStandings([], makeOf), []);
+  });
+});
+
+describe("onlyMostTracks", () => {
+  it("keeps everyone when they have all run the same tracks", () => {
+    const standings = buildStandings([
+      entry("a", "t1", 100),
+      entry("b", "t1", 200),
+      entry("a", "t2", 100),
+      entry("b", "t2", 200),
+    ]);
+    assert.equal(onlyMostTracks(standings).length, 2);
+  });
+
+  it("drops the cars that have run fewer tracks", () => {
+    const standings = buildStandings([
+      entry("full", "t1", 100),
+      entry("full", "t2", 100),
+      entry("partial", "t1", 50),
+    ]);
+    assert.deepEqual(
+      onlyMostTracks(standings).map((s) => s.carId),
+      ["full"],
+    );
+  });
+
+  // Nobody has been everywhere: the leaders still have to be comparable to
+  // each other, so the cut is the highest count anyone has reached.
+  it("falls back to the highest count anyone has reached", () => {
+    const standings = buildStandings([
+      entry("two-a", "t1", 100),
+      entry("two-a", "t2", 100),
+      entry("two-b", "t1", 200),
+      entry("two-b", "t2", 200),
+      entry("one", "t1", 50),
+    ]);
+    const kept = onlyMostTracks(standings);
+    assert.equal(kept.length, 2);
+    for (const s of kept) assert.equal(s.raced, 2);
+  });
+
+  it("returns nothing for an empty table", () => {
+    assert.deepEqual(onlyMostTracks([]), []);
   });
 });
 

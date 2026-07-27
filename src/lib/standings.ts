@@ -134,6 +134,18 @@ export function hasMixedTrackCounts(standings: CarStanding[]): boolean {
   return new Set(standings.map((s) => s.raced)).size > 1;
 }
 
+/** The cars that have covered the most ground, and nobody else.
+ *
+ * Adding up times only compares like with like, so the total-time table is
+ * restricted to the cars that have run the fullest set of tracks - every track
+ * once every car has been everywhere, and otherwise whatever the leaders have
+ * managed. A car with one track fewer is not slightly behind; it is not in the
+ * same contest. */
+export function onlyMostTracks(standings: CarStanding[]): CarStanding[] {
+  const most = standings.reduce((max, s) => Math.max(max, s.raced), 0);
+  return standings.filter((s) => s.raced === most);
+}
+
 export interface MakeStanding {
   make: string;
   points: number;
