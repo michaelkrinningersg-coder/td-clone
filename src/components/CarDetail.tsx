@@ -17,7 +17,7 @@ import {
   gearTopSpeedsMps,
   powerLimitedTopSpeedMps,
   ratedSpeedRadS,
-  simulateRun,
+  simulateTrack,
   torqueFactor,
   wheelPowerW,
 } from "@/lib/physics";
@@ -89,10 +89,10 @@ export function CarDetail({ car }: { car: CarData }) {
 
   const laps = useMemo(
     () =>
-      tracks.map((track) => ({
-        track,
-        timeMs: simulateRun(car, track.segments).totalTimeMs,
-      })),
+      tracks.map((track) => {
+        const sim = simulateTrack(car, track);
+        return { track, timeMs: sim.totalTimeMs, distanceM: sim.distanceM };
+      }),
     [car],
   );
 
@@ -319,7 +319,7 @@ export function CarDetail({ car }: { car: CarData }) {
               </tr>
             </thead>
             <tbody>
-              {laps.map(({ track, timeMs }) => {
+              {laps.map(({ track, timeMs, distanceM }) => {
                 const standing = standingOn(track.id, timeMs);
                 const gap = standing ? timeMs - standing.bestMs : null;
                 return (
@@ -333,7 +333,7 @@ export function CarDetail({ car }: { car: CarData }) {
                       {(track.lengthM / 1000).toFixed(2)} km
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-zinc-400">
-                      {Math.round((track.lengthM / (timeMs / 1000)) * 3.6)} km/h
+                      {Math.round((distanceM / (timeMs / 1000)) * 3.6)} km/h
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-zinc-500">
                       {gap === null ? "—" : gap === 0 ? "Bestzeit" : `+${(gap / 1000).toFixed(2)}s`}

@@ -160,11 +160,14 @@ describe("the circuits that ship", () => {
         "Handlingkurs",
         "Hungaroring",
         "Interlagos",
+        "Kreisbahn 200 m",
         "Monaco",
         "Monza",
         "Silverstone",
         "Spa-Francorchamps",
+        "Stadtkurs eng",
         "Suzuka",
+        "Trioval 4500 m",
       ],
     );
   });
@@ -181,6 +184,9 @@ describe("the circuits that ship", () => {
       // The surveyed circuits at their real length; the handling course at the
       // length it was built to.
       const expected: Record<string, number> = {
+        "Kreisbahn 200 m": 1257,
+        "Stadtkurs eng": 2500,
+        "Trioval 4500 m": 4500,
         Monza: 5766,
         "Spa-Francorchamps": 6956,
         Monaco: 3311,
@@ -205,9 +211,13 @@ describe("the circuits that ship", () => {
   }
 
   // Monza's Rettifilo, Spa's La Source, Monaco's hairpin, the Hungaroring's
-  // first corner. If the curvature reading drifts, these go first.
+  // first corner. If the curvature reading drifts, these go first. The
+  // constructed shapes are exempt: a 200 m ring has no tight corner by
+  // definition, and neither does a trioval.
+  const SWEEPING = new Set(["Kreisbahn 200 m", "Trioval 4500 m"]);
+
   it("finds the tight corners the circuits are known for", () => {
-    for (const track of surveyed) {
+    for (const track of surveyed.filter((t) => !SWEEPING.has(t.name))) {
       const tightest = Math.min(
         ...track.segments.filter((s) => s.kind === "corner").map((s) => (s as { radiusM: number }).radiusM),
       );

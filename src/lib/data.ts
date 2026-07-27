@@ -1,6 +1,6 @@
 import carsJson from "@/data/cars.json";
 import { tracks as trackDefs } from "@/data/tracks";
-import { trackLengthM, type Segment } from "@/lib/track-types";
+import { trackLengthM, type Segment, type SpeedTest } from "@/lib/track-types";
 import { carSlug, slugify, trackSlug } from "@/lib/slug";
 import type { Drivetrain } from "@/lib/physics";
 import type { BrakeKind } from "@/lib/car-import";
@@ -42,6 +42,8 @@ export interface TrackData {
   segments: Segment[];
   /** The surveyed centreline, where there is one - see TrackDefinition. */
   outline?: [number, number][];
+  /** Set when the track is a test against the speedometer - see SpeedTest. */
+  speedTest?: SpeedTest;
 }
 
 export const cars: CarData[] = (carsJson as Omit<CarData, "id">[])
@@ -62,6 +64,7 @@ export const tracks: TrackData[] = trackDefs
     lengthM: trackLengthM(track.segments),
     segments: track.segments,
     outline: track.outline,
+    speedTest: track.speedTest,
   }))
   .sort((a, b) => a.type.localeCompare(b.type) || a.lengthM - b.lengthM);
 

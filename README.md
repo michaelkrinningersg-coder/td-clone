@@ -113,19 +113,30 @@ Nur die **Steigungen** sind von Hand gesetzt: OpenStreetMap führt keine Höhen,
 Runde Spa ohne den Anstieg durch Eau Rouge wäre eine andere Strecke. Sie liegen als Bänder
 über dem Rundenanteil in `src/data/tracks.ts`.
 
-Acht vermessene Rundkurse: Monza, Spa, Monaco, Suzuka, Silverstone, Hungaroring und
-Interlagos, dazu ein konstruierter Handlingkurs.
+Sieben vermessene Rundkurse: Monza, Spa, Monaco, Suzuka, Silverstone, Hungaroring und
+Interlagos. Dazu vier konstruierte, die jeweils eine andere Frage stellen: Handlingkurs,
+Stadtkurs (rund sechzehn Kurven je Kilometer), Kreisbahn mit 200 m Radius (nur Grip, keine
+Leistung) und ein Trioval über 4,5 km (nur Leistung gegen Luftwiderstand).
 
-Was nicht vermessen ist, ist konstruiert und braucht keine Vermessung: der Handlingkurs
-entsteht aus einer gelappten Kurve (`r = 1 + 0,42·sin 3θ + 0,16·sin 5θ`), also aus einer
-Formel statt aus einer Kurvenliste — eine geschlossene Kurve ist von selbst geschlossen,
-und dieselbe Krümmungsmessung findet darin die Kurven. Slalom und Bremstest sind offene
-Segmentfolgen, weil sie Punkt zu Punkt gehen.
+Was nicht vermessen ist, ist konstruiert und braucht keine Vermessung: Handlingkurs und
+Stadtkurs entstehen aus gelappten Kurven (`r = 1 + 0,42·sin 3θ + 0,16·sin 5θ` bzw. drei
+höhere Harmonische für rund sechzehn Kurven je Kilometer), Kreisbahn und Trioval aus ihrer
+Geometrie — eine geschlossene Kurve ist von selbst geschlossen, und dieselbe
+Krümmungsmessung findet darin die Kurven. Slalom und Bremstests sind offene Segmentfolgen,
+weil sie Punkt zu Punkt gehen. Die Trioval-Kurven sind flach: Steilkurven kennt das Modell
+nicht.
 
 Pikes Peak bleibt eine Segmentliste ohne Umriss: ein Bergrennen ist keine Runde und hat
 sich nicht zu schließen. Dazu kommen fünf reine Sprintstrecken von 100 bis 2000 Metern —
 die kürzeste ist vorbei, bevor die meisten Autos aus dem zweiten Gang sind, und fragt damit
 nur nach Traktion und den ersten beiden Übersetzungen.
+
+Zwei Strecken sind gar keine Strecken, sondern Messungen gegen den Tacho: **0-100-0 km/h**
+und **Rollstart 50-100 km/h**. Dort steht die Distanz nicht fest, sondern fällt aus dem Lauf
+heraus — die angegebene Länge ist nur die gezeichnete Linie, auf der die Autos nebeneinander
+laufen. Wer die Zielgeschwindigkeit nicht erreicht, bekommt nach zwei Minuten diese zwei
+Minuten als Platzhalter; ohne den käme ein Auto, dessen Höchstgeschwindigkeit unter dem Ziel
+liegt, nie zu einer Zeit.
 
 Die Kurvenrichtung geht **nicht** in die Zeit ein — sie entscheidet nur, wohin sich die
 Linie dreht.

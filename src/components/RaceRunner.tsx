@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { buildTrackPath, outlinePath, pointAtDistance, toSvgPath } from "@/lib/track-geometry";
-import { interpolateTraceAtTime, simulateRun, type SimResult } from "@/lib/physics";
+import { interpolateTraceAtTime, simulateTrack, type SimResult } from "@/lib/physics";
 import { playbackDurationMs, raceHex, rankRacers, type RacerProgress } from "@/lib/race";
 import { timeStore } from "@/lib/time-store";
 import { formatTimeMs } from "@/lib/format";
@@ -55,7 +55,7 @@ export function RaceRunner({
   /** Every car is simulated up front; the animation is only a replay of results
    * that already exist, which is what lets the ranking know each final time. */
   const sims = useMemo<{ car: CarData; sim: SimResult }[]>(
-    () => cars.map((car) => ({ car, sim: simulateRun(car, track.segments) })),
+    () => cars.map((car) => ({ car, sim: simulateTrack(car, track) })),
     [cars, track],
   );
   const slowestMs = Math.max(...sims.map((s) => s.sim.totalTimeMs));

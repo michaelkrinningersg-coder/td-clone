@@ -1,4 +1,4 @@
-import type { Segment } from "./track-types";
+import type { Segment, SpeedTest } from "./track-types";
 import type { BrakeKind } from "./car-import";
 
 const G = 9.81;
@@ -45,6 +45,9 @@ export interface SimResult {
   trace: TracePoint[];
   /** Cumulative time at each sector boundary, in milliseconds. */
   sectorTimesMs: number[];
+  /** Metres actually covered. The same as the track's length for a lap; on a
+   * speed test it is whatever the car needed. */
+  distanceM: number;
 }
 
 export const SECTOR_COUNT = 3;
@@ -433,7 +436,110 @@ export function simulateRun(car: CarPhysicsInput, segments: Segment[]): SimResul
     trace.push({ distanceM: distance, timeS: t, speedKph: v / KPH_TO_MPS });
   }
 
-  return { totalTimeMs, trace, sectorTimesMs };
+  return { totalTimeMs, trace, sectorTimesMs, distanceM: distance };
+}
+
+/** A run against the speedometer: from one speed to another, and on a standing
+ * test back to a standstill.
+ *
+ * The clock is the real one; the distances in the trace are not. They are
+ * stretched so that every car covers the drawn line exactly as it finishes,
+ * because the line is a prop - the test is over when the speed is reached, not
+ * when a distance is. A car that cannot reach the speed at all is given the
+ * timeout, which is a placeholder and not a measurement: without it a car whose
+ * top speed is below the target would simply never produce a time.
+ *
+ * `distanceM` still carries the metres the car really used, so anything that
+ * wants an average speed gets an honest one. */
+export function simulateSpeedTest(car: CarPhysicsInput, test: SpeedTest, drawnLengthM: number): SimResult {
+  const gearbox = buildGearbox(car);
+  const launchLimitN = solveLaunchLimitN(car, gearbox);
+  const shiftCost = car.manualGearbox ? SHIFT_TIME_S.manual : SHIFT_TIME_S.automatic;
+  const from = test.fromKph * KPH_TO_MPS;
+  const target = test.toKph * KPH_TO_MPS;
+
+  let v = from;
+  let t = 0;
+  let distance = 0;
+  // Gears below the rolling start are already behind the car.
+  let nextShift = gearbox.shiftSpeeds.filter((s) => s <= from).length;
+  const raw: TracePoint[] = [{ distanceM: 0, timeS: 0, speedKph: test.fromKph }];
+
+  let stalled = false;
+  while (v < target && t < test.timeoutS) {
+    const a = accelerationMps2(car, gearbox, v, launchLimitN, 0);
+    // Not "a <= 0": as a car nears the speed drag holds it at, the acceleration
+    // creeps towards zero and the run would crawl to the timeout a millimetre
+    // at a time. Below a fiftieth of a g it is not going to get there.
+    if (a < 0.2) {
+      stalled = true;
+      break;
+    }
+    const vNext = v + a * DT;
+    distance += ((v + vNext) / 2) * DT;
+    v = vNext;
+    t += DT;
+    while (nextShift < gearbox.shiftSpeeds.length && v >= gearbox.shiftSpeeds[nextShift]) {
+      t += shiftCost;
+      nextShift++;
+    }
+    raw.push({ distanceM: distance, timeS: t, speedKph: v / KPH_TO_MPS });
+  }
+
+  if (stalled || v < target) {
+    const timedOut: TracePoint[] = [
+      { distanceM: 0, timeS: 0, speedKph: test.fromKph },
+      { distanceM: drawnLengthM, timeS: test.timeoutS, speedKph: v / KPH_TO_MPS },
+    ];
+    const timeoutMs = Math.round(test.timeoutS * 1000);
+    return {
+      totalTimeMs: timeoutMs,
+      trace: timedOut,
+      sectorTimesMs: Array.from({ length: SECTOR_COUNT }, () => timeoutMs),
+      distanceM: distance,
+    };
+  }
+
+  if (test.brakeToStop) {
+    const decel = brakingDecelMps2(car);
+    while (v > 0.5 && t < test.timeoutS) {
+      const vNext = Math.max(0, v - decel * DT);
+      distance += ((v + vNext) / 2) * DT;
+      v = vNext;
+      t += DT;
+      raw.push({ distanceM: distance, timeS: t, speedKph: v / KPH_TO_MPS });
+    }
+    raw.push({ distanceM: distance, timeS: t, speedKph: 0 });
+  }
+
+  // Stretch the run onto the drawn line, thinned to the usual trace length.
+  const scale = distance > 0 ? drawnLengthM / distance : 0;
+  const step = Math.max(1, Math.floor(raw.length / TRACE_SAMPLES));
+  const trace: TracePoint[] = [];
+  for (let i = 0; i < raw.length; i += step) {
+    trace.push({ ...raw[i], distanceM: raw[i].distanceM * scale });
+  }
+  const last = raw[raw.length - 1];
+  trace.push({ ...last, distanceM: last.distanceM * scale });
+
+  const totalTimeMs = Math.round(t * 1000);
+  const sectorTimesMs = Array.from({ length: SECTOR_COUNT }, (_, i) => {
+    const at = ((i + 1) / SECTOR_COUNT) * distance;
+    const point = raw.find((p) => p.distanceM >= at) ?? last;
+    return Math.round(point.timeS * 1000);
+  });
+
+  return { totalTimeMs, trace, sectorTimesMs, distanceM: distance };
+}
+
+/** Runs whichever kind of thing the track is. */
+export function simulateTrack(
+  car: CarPhysicsInput,
+  track: { segments: Segment[]; lengthM: number; speedTest?: SpeedTest },
+): SimResult {
+  return track.speedTest
+    ? simulateSpeedTest(car, track.speedTest, track.lengthM)
+    : simulateRun(car, track.segments);
 }
 
 /** Interpolates the trace (which is sampled at fixed distance intervals) at an

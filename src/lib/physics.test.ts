@@ -12,10 +12,11 @@ import {
   effectiveTopSpeedMps,
   frontalAreaM2,
   simulateRun,
+  simulateSpeedTest,
   wheelPowerW,
   type CarPhysicsInput,
 } from "./physics";
-import type { Segment } from "./track-types";
+import type { Segment, SpeedTest } from "./track-types";
 
 const golfGti: CarPhysicsInput = {
   topSpeedKph: 250,
@@ -483,5 +484,71 @@ describe("sector times", () => {
     const slow = simulateRun(golfGti, track).sectorTimesMs;
     const fast = simulateRun(veyron, track).sectorTimesMs;
     for (let i = 0; i < 3; i++) assert.ok(fast[i] < slow[i], `sector ${i + 1}`);
+  });
+});
+
+describe("simulateSpeedTest", () => {
+  const standing: SpeedTest = { fromKph: 0, toKph: 100, brakeToStop: true, timeoutS: 120 };
+  const rolling: SpeedTest = { fromKph: 50, toKph: 100, brakeToStop: false, timeoutS: 120 };
+
+  it("reproduces the car's own 0-100 time before it starts braking", () => {
+    // The accelerating half is the figure the launch limit was solved against,
+    // so it has to come back out of a standing test.
+    const toHundred: SpeedTest = { ...standing, brakeToStop: false };
+    const s = simulateSpeedTest(golfGti, toHundred, 400).totalTimeMs / 1000;
+    assert.ok(Math.abs(s - golfGti.accel0to100s) < 0.15, `read ${s.toFixed(2)} s`);
+  });
+
+  it("keeps the clock running through the braking", () => {
+    const rollOn = simulateSpeedTest(golfGti, { ...standing, brakeToStop: false }, 400);
+    const andBack = simulateSpeedTest(golfGti, standing, 400);
+    assert.ok(andBack.totalTimeMs > rollOn.totalTimeMs);
+    assert.ok(andBack.distanceM > rollOn.distanceM);
+  });
+
+  it("rewards the better brakes on the way back down", () => {
+    const good = simulateSpeedTest({ ...golfGti, brakeFront: "ventilated-disc", brakeRear: "ventilated-disc" }, standing, 400);
+    const poor = simulateSpeedTest({ ...golfGti, brakeFront: "drum", brakeRear: "drum" }, standing, 400);
+    assert.ok(good.totalTimeMs < poor.totalTimeMs);
+  });
+
+  it("is quicker from a rolling start than from rest", () => {
+    const fromRest = simulateSpeedTest(golfGti, { ...standing, brakeToStop: false }, 400);
+    const fromFifty = simulateSpeedTest(golfGti, rolling, 300);
+    assert.ok(fromFifty.totalTimeMs < fromRest.totalTimeMs);
+  });
+
+  it("hands out the timeout to a car that cannot get there", () => {
+    // 40 PS in three tonnes of barn door: 100 km/h is not happening.
+    const hopeless: CarPhysicsInput = {
+      ...golfGti,
+      powerPs: 40,
+      torqueNm: 90,
+      weightKg: 3000,
+      dragCoefficient: 0.9,
+      widthMm: 2200,
+      heightMm: 2600,
+      accel0to100s: 60,
+    };
+    const run = simulateSpeedTest(hopeless, standing, 400);
+    assert.equal(run.totalTimeMs, 120_000);
+    assert.equal(run.trace[run.trace.length - 1].distanceM, 400);
+  });
+
+  it("draws the run across the whole line whatever it really covered", () => {
+    for (const car of [golfGti, veyron]) {
+      const run = simulateSpeedTest(car, standing, 400);
+      assert.ok(Math.abs(run.trace[run.trace.length - 1].distanceM - 400) < 1);
+      // A Veyron needs about seventy metres for the whole thing, a Golf twice
+      // that: the drawn line is a prop, the metres are the car's own.
+      assert.ok(run.distanceM > 50 && run.distanceM < 1000, `${run.distanceM} m`);
+    }
+  });
+
+  it("gives the quicker car the shorter time", () => {
+    assert.ok(
+      simulateSpeedTest(veyron, standing, 400).totalTimeMs <
+        simulateSpeedTest(golfGti, standing, 400).totalTimeMs,
+    );
   });
 });
