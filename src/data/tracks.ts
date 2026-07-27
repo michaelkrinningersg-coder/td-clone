@@ -143,6 +143,9 @@ function handlingCourse(lengthM: number, points = 400): [number, number][] {
 }
 
 export const tracks: TrackDefinition[] = [
+  // A hundred metres is over before most cars are out of second: it asks about
+  // traction and the first two gears, nothing else.
+  { name: "Sprint 100m", type: "SPRINT", segments: [straight(100)] },
   { name: "Sprint 250m", type: "SPRINT", segments: [straight(250)] },
   { name: "Sprint 500m", type: "SPRINT", segments: [straight(500)] },
   { name: "Sprint 1000m", type: "SPRINT", segments: [straight(1000)] },

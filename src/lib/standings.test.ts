@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  bestPerMake,
+  carsOnEveryTrack,
   buildMakeStandings,
   buildStandings,
   hasMixedTrackCounts,
@@ -266,6 +268,63 @@ describe("buildMakeStandings", () => {
 
   it("returns nothing when nothing has been raced", () => {
     assert.deepEqual(buildMakeStandings([], makeOf), []);
+  });
+});
+
+describe("bestPerMake", () => {
+  const makes: Record<string, string> = { a1: "Audi", a2: "Audi", a3: "Audi", b1: "BMW" };
+  const makeOf = (id: string) => makes[id];
+  const standings = buildStandings([
+    entry("a1", "t1", 100),
+    entry("a2", "t1", 200),
+    entry("a3", "t1", 300),
+    entry("b1", "t1", 400),
+  ]);
+
+  it("keeps only a marque's best cars", () => {
+    const kept = bestPerMake(standings, makeOf, 2);
+    assert.deepEqual(
+      kept
+        .filter((s) => makeOf(s.carId) === "Audi")
+        .map((s) => s.carId)
+        .sort(),
+      ["a1", "a2"],
+    );
+  });
+
+  it("leaves a marque smaller than the squad alone", () => {
+    assert.equal(bestPerMake(standings, makeOf, 2).filter((s) => makeOf(s.carId) === "BMW").length, 1);
+  });
+
+  it("hands everything back when there is no limit", () => {
+    assert.equal(bestPerMake(standings, makeOf, null).length, standings.length);
+  });
+
+  // The point of the limit: a marque cannot buy points by entering more cars.
+  it("stops numbers from deciding the marque table", () => {
+    const table = buildMakeStandings(bestPerMake(standings, makeOf, 1), makeOf);
+    assert.equal(table[0].make, "Audi");
+    assert.equal(table.find((t) => t.make === "Audi")!.cars, 1);
+    assert.equal(table.find((t) => t.make === "BMW")!.cars, 1);
+  });
+});
+
+describe("carsOnEveryTrack", () => {
+  it("finds the cars that have been everywhere", () => {
+    const complete = carsOnEveryTrack(
+      [entry("a", "t1", 100), entry("a", "t2", 100), entry("b", "t1", 100)],
+      2,
+    );
+    assert.deepEqual([...complete], ["a"]);
+  });
+
+  it("counts tracks, not times", () => {
+    const complete = carsOnEveryTrack([entry("a", "t1", 100), entry("a", "t1", 90)], 2);
+    assert.equal(complete.size, 0);
+  });
+
+  it("is empty when nothing has been driven", () => {
+    assert.equal(carsOnEveryTrack([], 3).size, 0);
   });
 });
 

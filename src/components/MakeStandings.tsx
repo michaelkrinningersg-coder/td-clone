@@ -1,30 +1,65 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { getCar } from "@/lib/data";
 import { brandColor } from "@/lib/brand-colors";
-import { buildMakeStandings, type CarStanding } from "@/lib/standings";
+import { bestPerMake, buildMakeStandings, type CarStanding } from "@/lib/standings";
 
 const PODIUM = ["text-amber-300", "text-zinc-300", "text-orange-400"];
+
+/** How many cars a marque may score with. */
+const SQUADS: { label: string; limit: number | null; hint: string }[] = [
+  {
+    label: "Beste 5",
+    limit: 5,
+    hint: "Nur die fünf punktbesten Autos je Marke. Gleich große Mannschaften, also zählt die Qualität statt der Menge.",
+  },
+  {
+    label: "Beste 10",
+    limit: 10,
+    hint: "Nur die zehn punktbesten Autos je Marke — etwas mehr Tiefe, immer noch derselbe Kader für alle.",
+  },
+  {
+    label: "Alle Autos",
+    limit: null,
+    hint: "Jedes Auto der Marke zählt. Wer mit mehr Autos antritt, sammelt mehr — die Spalte „Ø je Fahrt“ zeigt die Wertung ohne diesen Vorteil.",
+  },
+];
 
 /** The car table rolled up by marque. Ordered by total points, so entering in
  * numbers counts as well as being quick; the per-outing column is there for
  * anyone who wants the other reading. */
 export function MakeStandings({ standings }: { standings: CarStanding[] }) {
-  const makeStandings = useMemo(
-    () => buildMakeStandings(standings, (carId) => getCar(carId)?.make),
-    [standings],
-  );
+  const [squad, setSquad] = useState(SQUADS.length - 1);
+  const makeStandings = useMemo(() => {
+    const makeOf = (carId: string) => getCar(carId)?.make;
+    return buildMakeStandings(bestPerMake(standings, makeOf, SQUADS[squad].limit), makeOf);
+  }, [standings, squad]);
 
   if (makeStandings.length === 0) return null;
 
   return (
     <section className="mt-10">
       <h2 className="text-lg font-bold text-white">Markenwertung</h2>
-      <p className="mt-1 text-sm text-zinc-400">
-        Alle Autos einer Marke zusammengezählt. Die Reihenfolge folgt den Gesamtpunkten — wer mit mehr Autos
-        antritt, sammelt mehr. Die Spalte &bdquo;Ø je Fahrt&ldquo; zeigt die Wertung ohne diesen Vorteil.
-      </p>
+
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-900 p-1">
+          {SQUADS.map((option, i) => (
+            <button
+              key={option.label}
+              type="button"
+              onClick={() => setSquad(i)}
+              aria-pressed={squad === i}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                squad === i ? "bg-emerald-500 text-zinc-950" : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <p className="max-w-xl text-xs text-zinc-500">{SQUADS[squad].hint}</p>
+      </div>
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-800">
         <table className="w-full min-w-[46rem] text-sm">

@@ -22,6 +22,7 @@ export function RaceRunner({
   track,
   saveTimes = true,
   showResult = true,
+  autoStart = false,
   onFinish,
   outro,
 }: {
@@ -29,6 +30,9 @@ export function RaceRunner({
   track: TrackData;
   /** Off for a run that should not touch the leaderboard. */
   saveTimes?: boolean;
+  /** Starts the replay as soon as the runner appears, for a caller that has
+   * already asked - the championship's "score it and on we go" is the go. */
+  autoStart?: boolean;
   /** Off for a caller that shows the result itself - the championship carries
    * it in its own header, and a second panel appearing under the map would
    * push the whole page down at the moment the field comes home. */
@@ -67,6 +71,17 @@ export function RaceRunner({
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
   }, []);
+
+  // Kept in a ref so the auto-start effect does not have to depend on a
+  // function that is new on every render - the runner is mounted afresh per
+  // round, so this fires once and only once.
+  const startRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    startRef.current = handleStart;
+  });
+  useEffect(() => {
+    if (autoStart) startRef.current();
+  }, [autoStart]);
 
   // All cars share one clock, so a faster car visibly pulls away and crosses
   // the line first instead of every car finishing together.

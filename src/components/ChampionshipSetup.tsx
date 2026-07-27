@@ -1,11 +1,13 @@
 "use client";
 
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { cars, getCar, getTrack, tracks, type CarData } from "@/lib/data";
 import { carClassOf, carClasses, classRangeLabel } from "@/lib/classes";
 import { brandColor } from "@/lib/brand-colors";
 import { CHAMPIONSHIP_SIZE } from "@/lib/championship";
 import { fieldAround, randomGrid } from "@/lib/random-grid";
+import { carsOnEveryTrack } from "@/lib/standings";
+import { timeStore } from "@/lib/time-store";
 import { carMatches } from "@/components/CarList";
 
 /** Building a championship: thirty cars and a calendar.
@@ -18,6 +20,23 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
   const [calendar, setCalendar] = useState<string[]>(tracks.map((t) => t.id));
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
+  const [onlyUnfinished, setOnlyUnfinished] = useState(false);
+  // The cars that have already been round every track. Loaded once: a
+  // championship is set up in one sitting, and nothing here writes times.
+  const [completeIds, setCompleteIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(tracks.map((track) => timeStore.getLeaderboard(track.id)))
+      .then((perTrack) => {
+        if (!cancelled) setCompleteIds(carsOnEveryTrack(perTrack.flat(), tracks.length));
+      })
+      .catch(() => {
+        if (!cancelled) setCompleteIds(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const results = useMemo(() => {
     const words = deferredQuery.toLowerCase().split(/\s+/).filter(Boolean);
@@ -39,7 +58,13 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
   }
 
   function fillRandom(classId?: string) {
-    setField(randomGrid(cars, { count: CHAMPIONSHIP_SIZE, classId }).map((c) => c.id));
+    setField(
+      randomGrid(cars, {
+        count: CHAMPIONSHIP_SIZE,
+        classId,
+        excludeIds: onlyUnfinished ? completeIds : undefined,
+      }).map((c) => c.id),
+    );
   }
 
   function toggleTrack(id: string) {
@@ -138,6 +163,23 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
             </button>
           ))}
         </div>
+
+        <label className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+          <input
+            type="checkbox"
+            checked={onlyUnfinished}
+            onChange={(e) => setOnlyUnfinished(e.target.checked)}
+            className="h-3.5 w-3.5 accent-emerald-500"
+          />
+          Nur Autos, die noch nicht auf allen {tracks.length} Strecken eine Zeit haben
+          <span className="text-zinc-600">
+            {completeIds.size === 0
+              ? "— derzeit betrifft das kein Auto"
+              : `— ${completeIds.size} ${completeIds.size === 1 ? "Auto ist" : "Autos sind"} überall gefahren und ${
+                  completeIds.size === 1 ? "bliebe" : "blieben"
+                } draußen`}
+          </span>
+        </label>
 
         {fieldCars.length > 0 && (
           <>

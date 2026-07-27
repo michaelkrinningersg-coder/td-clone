@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getCar, getTrack } from "@/lib/data";
 import { brandColor } from "@/lib/brand-colors";
 import { formatTimeMs } from "@/lib/format";
@@ -16,6 +16,10 @@ import {
 import { RaceRunner } from "@/components/RaceRunner";
 
 const PODIUM = ["text-amber-300", "text-zinc-300", "text-orange-400"];
+
+/** How long a finished round stays on screen before the next one starts. Long
+ * enough to read the winner, short enough not to be a wait. */
+const AUTO_ADVANCE_MS = 3000;
 
 /** A championship in progress: the whole field on track, then the table.
  *
@@ -33,6 +37,10 @@ export function ChampionshipRunner({
   // once: committing it changes the state, which swaps in the next track, and
   // the result would be gone before anyone had read it.
   const [finishedRound, setFinishedRound] = useState<CarResult[] | null>(null);
+  // A season is fifteen rounds; clicking through every one of them is not the
+  // game. Left on, a finished round is scored and the next one started on its
+  // own, with just enough of a pause to read who won.
+  const [autoAdvance, setAutoAdvance] = useState(true);
 
   // The table follows the chequered flag, not the confirmation: the moment the
   // last car is home the round is scored into a provisional standing, so the
@@ -64,11 +72,26 @@ export function ChampionshipRunner({
   const roundNumber = state.rounds.length + 1;
   const lastRound = state.trackIds.length;
 
-  function confirmRound() {
+  function confirmRound(scrollToTrack = true) {
     if (!finishedRound) return;
     setFinishedRound(null);
     onRoundFinished(finishedRound);
+    // The next round starts on its own, so bring the map back into view - the
+    // button can be pressed from anywhere on the page. On an automatic
+    // advance the page is left where the reader put it.
+    if (scrollToTrack) window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  // Held in a ref so the timer below does not restart on every render.
+  const confirmRef = useRef(confirmRound);
+  useEffect(() => {
+    confirmRef.current = confirmRound;
+  });
+  useEffect(() => {
+    if (!autoAdvance || !finishedRound) return;
+    const timer = setTimeout(() => confirmRef.current(false), AUTO_ADVANCE_MS);
+    return () => clearTimeout(timer);
+  }, [autoAdvance, finishedRound]);
 
   // Who won the round that has just come home, for the header.
   const roundWinner = finishedRound
@@ -97,12 +120,28 @@ export function ChampionshipRunner({
               <p className="truncate text-xs text-zinc-400">
                 {gridCars.length} Autos gemeinsam am Start
                 {state.rounds.length > 0 && " · aufgestellt nach dem Meisterschaftsstand"}
-                {finishedRound && " · Stand vorläufig gewertet"}
+                {finishedRound &&
+                  (autoAdvance
+                    ? " · gewertet, nächster Lauf startet gleich"
+                    : " · Stand vorläufig gewertet")}
               </p>
             </div>
 
+            <label
+              className="ml-auto hidden shrink-0 items-center gap-2 text-xs text-zinc-400 md:flex"
+              title="Jeden Lauf werten und den nächsten sofort starten, bis die Meisterschaft entschieden ist."
+            >
+              <input
+                type="checkbox"
+                checked={autoAdvance}
+                onChange={(e) => setAutoAdvance(e.target.checked)}
+                className="h-3.5 w-3.5 accent-emerald-500"
+              />
+              Läufe automatisch
+            </label>
+
             {finishedRound && (
-              <div className="ml-auto flex shrink-0 items-center gap-4">
+              <div className="flex shrink-0 items-center gap-4">
                 <div className="hidden min-w-0 text-right md:block">
                   <div className="text-[11px] uppercase tracking-wide text-zinc-500">Zieleinlauf</div>
                   <div className="truncate font-semibold text-white">
@@ -120,7 +159,7 @@ export function ChampionshipRunner({
                 </a>
                 <button
                   type="button"
-                  onClick={confirmRound}
+                  onClick={() => confirmRound()}
                   className="whitespace-nowrap rounded-full bg-emerald-500 px-5 py-2 font-semibold text-zinc-950 hover:bg-emerald-400"
                 >
                   {roundNumber < lastRound ? "Lauf werten und weiter" : "Meisterschaft abschließen"}
@@ -140,6 +179,9 @@ export function ChampionshipRunner({
             track={track}
             onFinish={setFinishedRound}
             showResult={false}
+            // The first round waits to be started; every one after it follows
+            // straight on from "Lauf werten und weiter".
+            autoStart={state.rounds.length > 0}
           />
         </section>
       )}

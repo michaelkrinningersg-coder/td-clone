@@ -163,6 +163,51 @@ export interface MakeStanding {
   bestCarId: string;
 }
 
+/** The cars that hold a time on every track there is.
+ *
+ * What the championship setup leaves out when it should field cars that still
+ * have somewhere to prove themselves. */
+export function carsOnEveryTrack(entries: readonly TimeEntryData[], trackCount: number): Set<string> {
+  const seen = new Map<string, Set<string>>();
+  for (const entry of entries) {
+    const tracks = seen.get(entry.carId) ?? new Set<string>();
+    tracks.add(entry.trackId);
+    seen.set(entry.carId, tracks);
+  }
+  const complete = new Set<string>();
+  for (const [carId, tracks] of seen) {
+    if (tracks.size >= trackCount) complete.add(carId);
+  }
+  return complete;
+}
+
+/** Each marque cut down to its best `limit` cars by points, or left whole when
+ * `limit` is null.
+ *
+ * A marque table over every car is as much a count of how often a marque was
+ * entered as of how quick it is. Scoring only a squad of five or ten puts the
+ * marques on the same footing, the way a team sport does. */
+export function bestPerMake(
+  standings: CarStanding[],
+  makeOf: (carId: string) => string | undefined,
+  limit: number | null,
+): CarStanding[] {
+  if (limit === null) return standings;
+  const byMake = new Map<string, CarStanding[]>();
+  for (const standing of standings) {
+    const make = makeOf(standing.carId);
+    if (make === undefined) continue; // a car the dataset no longer holds
+    const squad = byMake.get(make) ?? [];
+    squad.push(standing);
+    byMake.set(make, squad);
+  }
+  return Array.from(byMake.values()).flatMap((squad) =>
+    [...squad]
+      .sort((a, b) => b.points - a.points || a.averagePosition - b.averagePosition)
+      .slice(0, limit),
+  );
+}
+
 /** Rolls the car standings up by marque.
  *
  * Ordered by total points, which rewards turning up in numbers as well as being

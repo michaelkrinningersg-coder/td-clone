@@ -123,7 +123,9 @@ und dieselbe Krümmungsmessung findet darin die Kurven. Slalom und Bremstest sin
 Segmentfolgen, weil sie Punkt zu Punkt gehen.
 
 Pikes Peak bleibt eine Segmentliste ohne Umriss: ein Bergrennen ist keine Runde und hat
-sich nicht zu schließen. Dazu kommen vier reine Sprintstrecken.
+sich nicht zu schließen. Dazu kommen fünf reine Sprintstrecken von 100 bis 2000 Metern —
+die kürzeste ist vorbei, bevor die meisten Autos aus dem zweiten Gang sind, und fragt damit
+nur nach Traktion und den ersten beiden Übersetzungen.
 
 Die Kurvenrichtung geht **nicht** in die Zeit ein — sie entscheidet nur, wohin sich die
 Linie dreht.
