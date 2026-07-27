@@ -23,6 +23,7 @@ export function RankingRow({
   highlighted,
   podiumClass,
   brandColored,
+  dense,
   onDelete,
 }: {
   car: CarData | undefined;
@@ -46,6 +47,9 @@ export function RankingRow({
   /** Tints the marque column with that marque's colour. Off during a race,
    * where the grid colours carry the meaning instead. */
   brandColored?: boolean;
+  /** Drops the spec column and tightens the margins, for a board that shares
+   * its width with a second one. */
+  dense?: boolean;
   /** When given, the row offers to delete its recorded time. */
   onDelete?: () => void | Promise<void>;
 }) {
@@ -81,7 +85,9 @@ export function RankingRow({
 
       <div className="relative flex items-center gap-3">
         <span
-          className="w-24 shrink-0 truncate text-xs font-medium uppercase tracking-wide text-zinc-500 sm:w-32"
+          className={`shrink-0 truncate text-xs font-medium uppercase tracking-wide text-zinc-500 ${
+            dense ? "w-20" : "w-24 sm:w-32"
+          }`}
           style={brandColored && car ? { color: brandColor(car.make) } : undefined}
         >
           {car?.make ?? "—"}
@@ -95,11 +101,17 @@ export function RankingRow({
           {car && <span className="text-zinc-600"> ’{String(car.year).slice(2)}</span>}
         </span>
 
-        <span className="hidden min-w-0 flex-1 truncate text-xs text-zinc-500 lg:block">
-          {car ? `${car.variant} · ${car.powerPs} PS · ${car.drivetrain}` : "Auto nicht mehr im Bestand"}
-        </span>
+        {!dense && (
+          <span className="hidden min-w-0 flex-1 truncate text-xs text-zinc-500 lg:block">
+            {car ? `${car.variant} · ${car.powerPs} PS · ${car.drivetrain}` : "Auto nicht mehr im Bestand"}
+          </span>
+        )}
 
-        <span className="hidden w-32 shrink-0 truncate text-right font-mono text-xs text-zinc-500 sm:block">
+        <span
+          className={`hidden shrink-0 truncate text-right font-mono text-xs text-zinc-500 sm:block ${
+            dense ? "w-36" : "w-32"
+          }`}
+        >
           {note ?? ""}
         </span>
 

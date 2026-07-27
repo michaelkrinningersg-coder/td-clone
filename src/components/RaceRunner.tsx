@@ -30,7 +30,8 @@ export function RaceRunner({
   saveTimes?: boolean;
   /** Called once with every car's time when the replay has run out. */
   onFinish?: (results: { carId: string; timeMs: number }[]) => void;
-  /** Replaces the links under the result, e.g. with "next heat". */
+  /** Replaces the links under the result. Pass null to leave the panel bare,
+   * for a caller that carries the next step somewhere else. */
   outro?: React.ReactNode;
 }) {
   const path = useMemo(
@@ -217,7 +218,9 @@ export function RaceRunner({
           </div>
           <div className="font-mono text-2xl text-emerald-400">{formatTimeMs(ranked[0]?.totalTimeMs ?? 0)}</div>
           {error && <p className="mt-2 text-amber-400">{error}</p>}
-          {outro ?? (
+          {outro !== undefined ? (
+            outro
+          ) : (
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href={`/leaderboard/${track.id}`}
