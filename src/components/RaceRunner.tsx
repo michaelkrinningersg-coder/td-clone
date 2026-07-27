@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { buildTrackPath, pointAtDistance, toSvgPath } from "@/lib/track-geometry";
+import { buildTrackPath, outlinePath, pointAtDistance, toSvgPath } from "@/lib/track-geometry";
 import { interpolateTraceAtTime, simulateRun, type SimResult } from "@/lib/physics";
 import { playbackDurationMs, raceHex, rankRacers, type RacerProgress } from "@/lib/race";
 import { timeStore } from "@/lib/time-store";
@@ -34,7 +34,7 @@ export function RaceRunner({
   outro?: React.ReactNode;
 }) {
   const path = useMemo(
-    () => buildTrackPath(track.segments, Math.max(5, track.lengthM / 600)),
+    () => (track.outline ? outlinePath(track.outline) : buildTrackPath(track.segments, Math.max(5, track.lengthM / 600))),
     [track],
   );
   const viewBox = `${path.minX - PADDING} ${path.minY - PADDING} ${path.maxX - path.minX + PADDING * 2} ${

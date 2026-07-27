@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { tracks } from "@/lib/data";
-import { buildTrackPath, toSvgPath } from "@/lib/track-geometry";
+import { buildTrackPath, outlinePath, toSvgPath } from "@/lib/track-geometry";
 import { useSession } from "@/lib/selection";
 import type { TrackData } from "@/lib/data";
 
@@ -67,7 +67,7 @@ function TrackTile({
   current: boolean;
   onChoose: (id: string) => void;
 }) {
-  const path = buildTrackPath(track.segments, Math.max(5, track.lengthM / 400));
+  const path = track.outline ? outlinePath(track.outline) : buildTrackPath(track.segments, Math.max(5, track.lengthM / 400));
   const width = path.maxX - path.minX;
   const height = path.maxY - path.minY;
   const viewBox = `${path.minX - PADDING} ${path.minY - PADDING} ${width + PADDING * 2} ${height + PADDING * 2}`;

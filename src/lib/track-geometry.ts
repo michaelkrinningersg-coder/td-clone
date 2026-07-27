@@ -1,4 +1,5 @@
 import type { Segment } from "./track-types";
+import type { Point } from "./track-polyline";
 
 export interface PathPoint {
   distanceM: number;
@@ -53,6 +54,39 @@ export function buildTrackPath(segments: Segment[], stepM = 5): TrackPath {
       if (y < minY) minY = y;
       if (y > maxY) maxY = y;
     }
+  }
+
+  return { points, minX, maxX, minY, maxY };
+}
+
+/** The path of a circuit whose real centreline is known, drawn from the survey
+ * itself rather than by integrating the segment list.
+ *
+ * Integrating segments is how an open road has to be drawn, but for a circuit
+ * it throws away what the survey knows: every rounding in a radius bends the
+ * rest of the lap, and the line drifts off the shape it came from. Drawing the
+ * measured points keeps the outline exactly the circuit's own - and it closes,
+ * because the survey does. */
+export function outlinePath(outline: Point[]): TrackPath {
+  const points: PathPoint[] = [];
+  let distanceSoFar = 0;
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity;
+
+  // The closing leg back to the first point is part of the lap.
+  for (let i = 0; i <= outline.length; i++) {
+    const [x, y] = outline[i % outline.length];
+    if (i > 0) {
+      const [px, py] = outline[i - 1];
+      distanceSoFar += Math.hypot(x - px, y - py);
+    }
+    points.push({ distanceM: distanceSoFar, x, y });
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
   }
 
   return { points, minX, maxX, minY, maxY };

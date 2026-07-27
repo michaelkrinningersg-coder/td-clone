@@ -40,6 +40,8 @@ export interface TrackData {
   type: "SPRINT" | "CIRCUIT";
   lengthM: number;
   segments: Segment[];
+  /** The surveyed centreline, where there is one - see TrackDefinition. */
+  outline?: [number, number][];
 }
 
 export const cars: CarData[] = (carsJson as Omit<CarData, "id">[])
@@ -59,6 +61,7 @@ export const tracks: TrackData[] = trackDefs
     type: track.type,
     lengthM: trackLengthM(track.segments),
     segments: track.segments,
+    outline: track.outline,
   }))
   .sort((a, b) => a.type.localeCompare(b.type) || a.lengthM - b.lengthM);
 

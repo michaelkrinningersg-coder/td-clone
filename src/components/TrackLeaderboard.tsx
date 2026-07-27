@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
 import { getCar, type TrackData } from "@/lib/data";
-import { buildTrackPath, toSvgPath } from "@/lib/track-geometry";
+import { buildTrackPath, outlinePath, toSvgPath } from "@/lib/track-geometry";
 import { formatTimeMs } from "@/lib/format";
 import { useTrackTimes } from "@/lib/use-track-times";
 import { timeStore } from "@/lib/time-store";
@@ -34,7 +34,7 @@ export function TrackLeaderboard({ track, highlight }: { track: TrackData; highl
       });
   }, [entries, deferredQuery]);
 
-  const path = buildTrackPath(track.segments, Math.max(5, track.lengthM / 400));
+  const path = track.outline ? outlinePath(track.outline) : buildTrackPath(track.segments, Math.max(5, track.lengthM / 400));
   const width = path.maxX - path.minX;
   const height = path.maxY - path.minY;
   const best = entries?.[0];

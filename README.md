@@ -93,23 +93,28 @@ Vorwärtslauf beschleunigt dazwischen.
 
 ## Strecken
 
-Die drei Rundkurse in `src/data/tracks.ts` sind als **geschlossene Umrisse** hinterlegt —
-eine Punktfolge in Metern mit dem Kurvenradius an jedem Punkt. Daraus leitet
-`src/lib/track-outline.ts` die Segmentliste ab: jede Ecke wird durch einen Bogen ersetzt,
-der beide Schenkel berührt.
+`npm run import:tracks` lädt die **vermessenen Streckenmittellinien aus OpenStreetMap**,
+veröffentlicht als GeoJSON in [bacinger/f1-circuits](https://github.com/bacinger/f1-circuits),
+und rechnet sie in Meter um `src/data/track-outlines.ts`. Die Daten stehen wie
+OpenStreetMap selbst unter der ODbL, © OpenStreetMap-Mitwirkende.
 
-Vorher waren die Strecken Kurve für Kurve aufgeschrieben, und nichts band die letzte
-Kurve an die erste zurück: keine Runde schloss sich, Monaco drehte sich um 588° statt 360°
-und endete 1,8 km neben der Linie. Als Umriss gezeichnet schließt die Runde, weil die Form
-es tut — und die Radien, mit denen die Physik rechnet, sind die Radien der gezeichneten
-Linie. Ein Test hält für jeden Kurs fest, dass die Lücke unter einem Meter bleibt.
+Aus dem Punktzug leitet `src/lib/track-polyline.ts` die Segmente ab: die Krümmung wird
+entlang der Linie gemessen, benachbarte Punkte gleicher Krümmungsrichtung zu einer Kurve
+zusammengefasst, deren Radius aus dem Bogen selbst folgt — zurückgelegte Strecke geteilt
+durch gedrehten Winkel. Die Drehrichtung gehört zur Klassifikation, sonst würde sich in
+einer Schikane die Rechts- gegen die Linkskurve aufheben und aus zwei engen Kurven ein
+schneller Knick.
 
-Die Umrisse sind nach den echten Layouts von Hand gezeichnet (Kurvenfolge, Charakter,
-Drehrichtung, Steigungen) und anschließend auf die reale Streckenlänge skaliert. Sie sind
-eine Ähnlichkeit, keine Vermessung.
+Gezeichnet wird der vermessene Punktzug selbst, nicht die zurückgerechnete Segmentliste.
+So ist die Form auf dem Bildschirm die echte Geometrie der Strecke, und die Runde schließt
+sich, weil die Vermessung es tut.
 
-Pikes Peak bleibt eine Segmentliste: ein Bergrennen ist keine Runde und hat sich nicht zu
-schließen. Dazu kommen vier reine Sprintstrecken.
+Nur die **Steigungen** sind von Hand gesetzt: OpenStreetMap führt keine Höhen, und eine
+Runde Spa ohne den Anstieg durch Eau Rouge wäre eine andere Strecke. Sie liegen als Bänder
+über dem Rundenanteil in `src/data/tracks.ts`.
+
+Pikes Peak bleibt eine Segmentliste ohne Umriss: ein Bergrennen ist keine Runde und hat
+sich nicht zu schließen. Dazu kommen vier reine Sprintstrecken.
 
 Die Kurvenrichtung geht **nicht** in die Zeit ein — sie entscheidet nur, wohin sich die
 Linie dreht.

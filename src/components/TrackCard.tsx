@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { buildTrackPath, toSvgPath } from "@/lib/track-geometry";
+import { buildTrackPath, outlinePath, toSvgPath } from "@/lib/track-geometry";
 import type { TrackData } from "@/lib/data";
 
 const PADDING = 20;
 
 export function TrackCard({ track, href }: { track: TrackData; href: string }) {
-  const path = buildTrackPath(track.segments, Math.max(5, track.lengthM / 400));
+  const path = track.outline ? outlinePath(track.outline) : buildTrackPath(track.segments, Math.max(5, track.lengthM / 400));
   const width = path.maxX - path.minX;
   const height = path.maxY - path.minY;
   const viewBox = `${path.minX - PADDING} ${path.minY - PADDING} ${width + PADDING * 2} ${height + PADDING * 2}`;

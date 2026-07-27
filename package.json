@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "tsx --test src/**/*.test.ts",
     "import:cars": "tsx scripts/import-cars.ts",
+    "import:tracks": "tsx scripts/import-tracks.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:migrate": "prisma migrate dev"
   },

@@ -18,6 +18,10 @@ export interface TrackDefinition {
   name: string;
   type: "SPRINT" | "CIRCUIT";
   segments: Segment[];
+  /** The circuit's surveyed centreline, in metres. Present for the real
+   * circuits, where the map should be the measured shape rather than the
+   * segment list drawn back out. A sprint and a hillclimb have none. */
+  outline?: [number, number][];
 }
 
 export function trackLengthM(segments: Segment[]): number {
