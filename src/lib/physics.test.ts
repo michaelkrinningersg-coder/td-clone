@@ -79,15 +79,24 @@ describe("acceleration curve", () => {
     }
   });
 
-  it("never exceeds the car's real top speed", () => {
+  // Nothing artificial holds a car back: it runs until the air stops it or the
+  // engine runs out of revs in top gear.
+  it("runs to where drag stops it, not to a figure from the spec sheet", () => {
     for (const car of [golfGti, veyron]) {
       const { trace } = simulateRun(car, longStraight);
       const fastest = Math.max(...trace.map((p) => p.speedKph));
+      const dragLimit = dragLimitedTopSpeedMps(car) * 3.6;
       assert.ok(
-        fastest <= car.topSpeedKph + 0.01,
-        `${fastest.toFixed(1)} km/h exceeded top speed ${car.topSpeedKph}`,
+        Math.abs(fastest - dragLimit) < dragLimit * 0.05,
+        `${fastest.toFixed(1)} km/h should approach the drag limit of ${dragLimit.toFixed(1)}`,
       );
     }
+  });
+
+  it("ignores a lowered top-speed figure entirely", () => {
+    const limited = { ...veyron, topSpeedKph: 250 };
+    const fastest = Math.max(...simulateRun(limited, longStraight).trace.map((p) => p.speedKph));
+    assert.ok(fastest > 300, `a limiter should not cap the car, but it stopped at ${fastest.toFixed(0)}`);
   });
 
   it("accelerates hardest from a standstill and tapers off", () => {
@@ -206,11 +215,16 @@ describe("aerodynamics", () => {
   // Most of this field is electronically limited, so the listed top speed is a
   // limiter rather than the point where drag wins. Reading power back out of it
   // would rob every limited car of most of its engine.
-  it("does not mistake a limiter for the drag limit", () => {
+  // The quoted top speed says how the manufacturer chose to restrain the car,
+  // not what it can do, so it must not reach the model at all.
+  it("takes nothing at all from the quoted top speed", () => {
     const limited = { ...veyron, topSpeedKph: 250 };
     assert.equal(wheelPowerW(limited), wheelPowerW(veyron));
-    assert.ok(effectiveTopSpeedMps(limited) * 3.6 < 251);
-    assert.ok(dragLimitedTopSpeedMps(limited) * 3.6 > 300);
+    assert.equal(effectiveTopSpeedMps(limited), effectiveTopSpeedMps(veyron));
+    assert.equal(
+      simulateRun(limited, longStraight).totalTimeMs,
+      simulateRun(veyron, longStraight).totalTimeMs,
+    );
   });
 
   // The point of modelling drag: with the same engine, the slippery car pulls

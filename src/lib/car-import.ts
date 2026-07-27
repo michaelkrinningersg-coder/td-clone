@@ -457,6 +457,19 @@ export function isPlausible(car: ImportedCar): boolean {
     car.weightKg <= 4000 &&
     car.torqueNm >= 20 &&
     car.torqueNm <= 2500 &&
+    // Body dimensions decide the frontal area and with it the top speed, so a
+    // misparsed one is not a harmless oddity: the source holds a Ford Focus
+    // 71 mm wide and 58 mm tall, which would fly to 720 km/h.
+    car.widthMm >= 1200 &&
+    car.widthMm <= 2600 &&
+    car.heightMm >= 900 &&
+    car.heightMm <= 2600 &&
+    car.tyreWidthMm >= 100 &&
+    car.tyreWidthMm <= 400 &&
+    car.gearCount >= 1 &&
+    car.gearCount <= 10 &&
+    car.dragCoefficient >= 0.15 &&
+    car.dragCoefficient <= 0.8 &&
     car.year >= 1900 &&
     car.year <= 2030
   );

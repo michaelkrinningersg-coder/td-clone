@@ -14,6 +14,10 @@ const TRACE_SAMPLES = 300; // points returned for the visualization, independent
 export type Drivetrain = "FWD" | "RWD" | "AWD";
 
 export interface CarPhysicsInput {
+  /** Kept on the input for the car pages and filters that quote it. The model
+   * itself never reads it: how fast a car goes is decided by its power against
+   * its drag, and by the rev limiter in top gear - not by the figure the
+   * manufacturer chose to restrain it to. */
   topSpeedKph: number;
   accel0to100s: number;
   powerPs: number;
@@ -193,13 +197,13 @@ export function powerLimitedTopSpeedMps(car: CarPhysicsInput): number {
  * against the air, which is how road cars are geared. Deliberately not the
  * quoted top speed: a great many of these cars are electronically limited, and
  * gearing to 250 km/h would turn a limiter into a mechanical ceiling the real
- * car does not have. The limiter stays a separate cap.
+ * car does not have.
  *
  * The rest follow as a geometric series over a fixed spread, so a four-speed
  * takes big steps and an eight-speed small ones - the gear count is real data,
  * the spread is not. */
 export function gearTopSpeedsMps(car: CarPhysicsInput): number[] {
-  const vTop = Math.max(car.topSpeedKph * KPH_TO_MPS, powerLimitedTopSpeedMps(car));
+  const vTop = powerLimitedTopSpeedMps(car);
   const gears = Math.max(1, car.gearCount);
   if (gears === 1) return [vTop];
   const step = Math.pow(GEARBOX_SPREAD, 1 / (gears - 1));
@@ -266,10 +270,14 @@ export function dragLimitedTopSpeedMps(car: CarPhysicsInput): number {
   return (low + high) / 2;
 }
 
-/** The speed the car actually reaches: whichever comes first, the limiter it
- * leaves the factory with or the point where drag wins. */
+/** The speed the car actually reaches.
+ *
+ * Nothing artificial holds it back: the car runs until the air stops it, or
+ * until the engine hits the rev limiter in top gear - whichever comes first.
+ * The quoted top speed is a fact about how the manufacturer chose to restrain
+ * the car, not about what it can do, so it plays no part here. */
 export function effectiveTopSpeedMps(car: CarPhysicsInput): number {
-  return Math.min(car.topSpeedKph * KPH_TO_MPS, dragLimitedTopSpeedMps(car));
+  return dragLimitedTopSpeedMps(car);
 }
 
 /** Cornering grip. The friction constant is shared by every car; what varies is
@@ -336,14 +344,15 @@ export function solveLaunchLimitN(car: CarPhysicsInput, gearbox = buildGearbox(c
   return (low + high) / 2;
 }
 
-/** Speed the car may not exceed at each step along the track, from the corners
- * alone. Straights are unlimited here - drag is what caps them. */
+/** Speed the car may not exceed at each step along the track. Corners cap it;
+ * straights do not, because nothing but drag and the rev limiter should hold a
+ * car back, and both of those act through the drive force rather than through a
+ * ceiling imposed here. */
 function speedLimitProfile(car: CarPhysicsInput, segments: Segment[], stepM: number): number[] {
-  const limiter = car.topSpeedKph * KPH_TO_MPS;
   const limits: number[] = [];
   for (const seg of segments) {
     const steps = Math.max(1, Math.round(seg.lengthM / stepM));
-    const cap = seg.kind === "corner" ? Math.min(limiter, corneringSpeedCapMps(seg.radiusM, car)) : limiter;
+    const cap = seg.kind === "corner" ? corneringSpeedCapMps(seg.radiusM, car) : Number.POSITIVE_INFINITY;
     for (let i = 0; i < steps; i++) limits.push(cap);
   }
   return limits;

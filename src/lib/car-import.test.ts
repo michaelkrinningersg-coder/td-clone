@@ -461,6 +461,28 @@ describe("isPlausible", () => {
     assert.equal(isPlausible({ ...base, weightKg: 12 }), false);
     assert.equal(isPlausible({ ...base, powerPs: 9000 }), false);
   });
+
+  // The frontal area comes from these two, and the frontal area is what stops
+  // the car - the source really does hold a Ford Focus 71 mm wide.
+  it("rejects a body no car could have", () => {
+    assert.equal(isPlausible({ ...base, widthMm: 71 }), false);
+    assert.equal(isPlausible({ ...base, heightMm: 58 }), false);
+    assert.equal(isPlausible({ ...base, widthMm: 180365 }), false);
+    assert.equal(isPlausible({ ...base, heightMm: 18 }), false);
+  });
+
+  it("accepts the extremes that are real", () => {
+    assert.equal(isPlausible({ ...base, widthMm: 1250, heightMm: 1000 }), true); // a bubble car
+    assert.equal(isPlausible({ ...base, widthMm: 2100, heightMm: 2300 }), true); // a big van
+  });
+
+  it("rejects tyres, gears and a drag figure outside what a car can carry", () => {
+    assert.equal(isPlausible({ ...base, tyreWidthMm: 40 }), false);
+    assert.equal(isPlausible({ ...base, gearCount: 0 }), false);
+    assert.equal(isPlausible({ ...base, gearCount: 12 }), false);
+    assert.equal(isPlausible({ ...base, dragCoefficient: 0.05 }), false);
+    assert.equal(isPlausible({ ...base, dragCoefficient: 1.1 }), false);
+  });
 });
 
 describe("cleanVariant", () => {

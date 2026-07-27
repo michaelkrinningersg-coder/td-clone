@@ -45,13 +45,13 @@ Höhe, Bremsen vorn und hinten, Reifenbreite und Getriebe. Fehlt einer davon, fl
 Auto raus statt geschätzt zu werden. Ergebnis landet in `src/data/cars.json` und ist
 eingecheckt, der Import muss also nicht laufen, um die App zu starten.
 
-Der Trichter von 30.066 Motorvarianten auf 5.503 Autos:
+Der Trichter von 30.066 Motorvarianten auf 5.472 Autos:
 
 | Schritt | bleiben |
 |---|---|
-| vollständige, plausible Daten | 17.018 |
-| Varianten mit identischen Fahrwerten zusammengefasst | 16.898 |
-| je Marke + Modell + Baujahr nur Einstiegs- und Topmotorisierung | 5.503 |
+| vollständige, plausible Daten | 16.932 |
+| Varianten mit identischen Fahrwerten zusammengefasst | 16.812 |
+| je Marke + Modell + Baujahr nur Einstiegs- und Topmotorisierung | 5.472 |
 
 Der letzte Schritt wirft die Zwischenmotorisierungen weg: die Quelle führt jede je
 verkaufte Version, etwa 46 Ausführungen des Volvo S80 von 2009. Gruppiert wird bewusst
