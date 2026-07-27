@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
   MAX_RACE_CARS,
@@ -341,5 +343,44 @@ describe("rankRace", () => {
 describe("the size of a field", () => {
   it("is twenty-eight", () => {
     assert.equal(MAX_RACE_CARS, 28);
+  });
+});
+
+/** The one rule the race mode must never break.
+ *
+ * A leaderboard time is one clean lap, repeatable to the millisecond; a race
+ * has tyre wear, a driver's mistakes and the day's form in it. Letting one
+ * into the other would quietly ruin every record in the game, and it is the
+ * kind of thing a well-meaning refactor does by accident - so it is checked at
+ * the source rather than left to good intentions.
+ */
+describe("nothing from a race reaches the records", () => {
+  const root = fileURLToPath(new URL("../..", import.meta.url));
+  const raceMode = [
+    "src/lib/lap-race.ts",
+    "src/components/LapRaceRunner.tsx",
+    "src/components/LapRaceSetup.tsx",
+    "src/app/rennen/page.tsx",
+  ];
+
+  it("keeps the race mode away from the time store entirely", () => {
+    for (const file of raceMode) {
+      const source = readFileSync(root + file, "utf8");
+      for (const forbidden of ["time-store", "timeStore", "saveRun", "use-track-times"]) {
+        assert.ok(
+          !source.includes(forbidden),
+          `${file} mentions ${forbidden} - a race time must never reach a leaderboard`,
+        );
+      }
+    }
+  });
+
+  it("leaves the writing of times to the lap runner alone", () => {
+    // If a second place in the app ever starts writing times, this is where
+    // the question gets asked: is that place deterministic?
+    const writers = ["src/lib/time-store.ts", "src/components/RaceRunner.tsx"];
+    for (const file of writers) {
+      assert.ok(readFileSync(root + file, "utf8").includes("saveRun"), `${file} should still write times`);
+    }
   });
 });
