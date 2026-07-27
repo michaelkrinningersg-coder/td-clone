@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getCar, tracks } from "@/lib/data";
 import { brandColor } from "@/lib/brand-colors";
@@ -41,6 +41,8 @@ const ORDERS: { id: StandingsOrder; label: string; hint: string }[] = [
 export function OverallStandings() {
   const [entries, setEntries] = useState<TimeEntryData[] | null>(null);
   const [order, setOrder] = useState<StandingsOrder>("points");
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
@@ -65,6 +67,21 @@ export function OverallStandings() {
     const eligible = order === "time" ? onlyMostTracks(standings) : standings;
     return sortStandings(eligible, order);
   }, [standings, order]);
+  // Filtered after ordering, so a searched-for car keeps the place it holds in
+  // the whole table rather than being renumbered inside the search result.
+  const rows = useMemo(() => {
+    if (!ordered) return null;
+    const words = deferredQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    return ordered
+      .map((standing, i) => ({ standing, position: i + 1, car: getCar(standing.carId) }))
+      .filter(({ standing, car }) => {
+        if (words.length === 0) return true;
+        const haystack = car
+          ? `${car.make} ${car.model} ${car.variant} ${car.year}`.toLowerCase()
+          : standing.carId.toLowerCase();
+        return words.every((w) => haystack.includes(w));
+      });
+  }, [ordered, deferredQuery]);
   const tracksWithTimes = useMemo(
     () => new Set(entries?.map((e) => e.trackId) ?? []).size,
     [entries],
@@ -75,7 +92,7 @@ export function OverallStandings() {
   );
   const uneven = standings !== null && hasMixedTrackCounts(standings);
 
-  if (standings === null || ordered === null) {
+  if (standings === null || ordered === null || rows === null) {
     return <p className="mt-8 text-zinc-400">Lade Zeiten...</p>;
   }
 
@@ -97,6 +114,8 @@ export function OverallStandings() {
       <p className="mt-1 text-sm text-zinc-400">
         {standings.length} {standings.length === 1 ? "Auto" : "Autos"} auf {tracksWithTimes} von {tracks.length}{" "}
         Strecken.
+        {rows.length !== ordered.length &&
+          ` ${rows.length} davon ${rows.length === 1 ? "passt" : "passen"} zur Suche.`}
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -117,7 +136,15 @@ export function OverallStandings() {
             </button>
           ))}
         </div>
-        <p className="max-w-md text-xs text-zinc-500">{activeHint}</p>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Auto suchen..."
+          aria-label="Wertung nach einem Auto durchsuchen"
+          className="min-w-52 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-600 focus:outline-none"
+        />
+        <p className="max-w-sm text-xs text-zinc-500">{activeHint}</p>
         <span className="ml-auto">
           <ResetButton
             label="Alle Ranglisten zurücksetzen"
@@ -145,7 +172,13 @@ export function OverallStandings() {
         </p>
       )}
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-800">
+      {rows.length === 0 && (
+        <p className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-400">
+          Kein Auto in der Wertung passt zur Suche.
+        </p>
+      )}
+
+      <div className={`mt-4 overflow-x-auto rounded-xl border border-zinc-800 ${rows.length === 0 ? "hidden" : ""}`}>
         <table className="w-full min-w-[52rem] text-sm">
           <thead className="bg-zinc-900 text-xs uppercase tracking-wide text-zinc-500">
             <tr>
@@ -170,12 +203,12 @@ export function OverallStandings() {
             </tr>
           </thead>
           <tbody>
-            {ordered.map((standing, i) => {
-              const car = getCar(standing.carId);
-              return (
+            {rows.map(({ standing, position, car }) => (
                 <tr key={standing.carId} className="border-t border-zinc-800 bg-zinc-900/50">
-                  <td className={`px-3 py-2 text-right font-mono font-bold ${PODIUM[i] ?? "text-zinc-500"}`}>
-                    {i + 1}.
+                  <td
+                    className={`px-3 py-2 text-right font-mono font-bold ${PODIUM[position - 1] ?? "text-zinc-500"}`}
+                  >
+                    {position}.
                   </td>
                   <td
                     className="px-3 py-2 text-xs font-medium uppercase tracking-wide"
@@ -183,12 +216,18 @@ export function OverallStandings() {
                   >
                     {car?.make ?? "—"}
                   </td>
+                  {/* The whole cell opens the car's page, where the same times
+                      are broken down track by track. */}
                   <td className="px-3 py-2 text-white">
                     {car ? (
-                      <>
+                      <Link
+                        href={`/car?id=${encodeURIComponent(car.id)}`}
+                        className="block hover:text-emerald-400"
+                        title={`Alle Daten zum ${car.make} ${car.model}`}
+                      >
                         {car.model} <span className="text-zinc-600">’{String(car.year).slice(2)}</span>
                         <span className="block text-xs text-zinc-600">{car.variant}</span>
-                      </>
+                      </Link>
                     ) : (
                       standing.carId
                     )}
@@ -221,8 +260,7 @@ export function OverallStandings() {
                     {standing.points}
                   </td>
                 </tr>
-              );
-            })}
+            ))}
           </tbody>
         </table>
       </div>

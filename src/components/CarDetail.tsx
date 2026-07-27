@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { slugify } from "@/lib/slug";
 import { tracks, type CarData } from "@/lib/data";
 import { brandColor } from "@/lib/brand-colors";
 import { carClassOf, classRangeLabel, powerToWeight } from "@/lib/classes";
 import { formatTimeMs } from "@/lib/format";
+import { heatColor, lapScore, positionScore, readableOn } from "@/lib/heat";
+import { timeStore, type TimeEntryData } from "@/lib/time-store";
 import {
   buildGearbox,
   dragForceN,
@@ -42,6 +44,35 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
   );
 }
 
+/** One reading off the green-to-red scale, as a chip rather than as coloured
+ * text: the dark ends of the scale are unreadable as text on a dark page. */
+function Chip({ score, title, children }: { score: number; title: string; children: React.ReactNode }) {
+  const background = heatColor(score);
+  return (
+    <span
+      title={title}
+      className="inline-block rounded px-2 py-0.5 font-mono text-sm font-bold tabular-nums"
+      style={{ backgroundColor: background, color: readableOn(background) }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function HeatLegend() {
+  return (
+    <span className="flex items-center gap-2 text-xs text-zinc-500">
+      besser
+      <span className="flex overflow-hidden rounded">
+        {Array.from({ length: 12 }, (_, i) => (
+          <span key={i} className="h-2.5 w-4" style={{ backgroundColor: heatColor(i / 11) }} />
+        ))}
+      </span>
+      schlechter
+    </span>
+  );
+}
+
 /** Everything the game knows about one car, and everything it derives from it.
  *
  * The list view has room for five bars; this is where the other fourteen
@@ -64,6 +95,36 @@ export function CarDetail({ car }: { car: CarData }) {
       })),
     [car],
   );
+
+  // Every track's board, so each lap can be put next to the record and the
+  // field it would be joining.
+  const [boards, setBoards] = useState<Map<string, TimeEntryData[]> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(tracks.map((track) => timeStore.getLeaderboard(track.id)))
+      .then((perTrack) => {
+        if (!cancelled) setBoards(new Map(tracks.map((t, i) => [t.id, perTrack[i]])));
+      })
+      .catch(() => {
+        if (!cancelled) setBoards(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** What this car's lap on a track is worth: where it stands and how far off
+   * the record it is. A track it has not driven still gets a placing - the one
+   * its simulated lap would take - marked as the hypothetical it is. */
+  const standingOn = (trackId: string, timeMs: number) => {
+    const entries = boards?.get(trackId);
+    if (!entries || entries.length === 0) return null;
+    const own = entries.findIndex((e) => e.carId === car.id);
+    const driven = own >= 0;
+    const position = driven ? own + 1 : entries.filter((e) => e.timeMs < timeMs).length + 1;
+    const fieldSize = driven ? entries.length : entries.length + 1;
+    return { driven, position, fieldSize, bestMs: entries[0].timeMs };
+  };
 
   // One point every 2% of the rev range, from idle to the redline.
   const curve = Array.from({ length: 56 }, (_, i) => {
@@ -239,36 +300,86 @@ export function CarDetail({ car }: { car: CarData }) {
       </section>
 
       <section className="mt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-          Simulierte Zeiten auf allen Strecken
-        </h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+            Zeiten und Platzierungen auf allen Strecken
+          </h2>
+          <HeatLegend />
+        </div>
         <div className="mt-2 overflow-hidden rounded-xl border border-zinc-800">
           <table className="w-full text-sm">
+            <thead className="bg-zinc-900 text-xs uppercase tracking-wide text-zinc-500">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Strecke</th>
+                <th className="px-3 py-2 text-right font-medium">Länge</th>
+                <th className="px-3 py-2 text-right font-medium">⌀ Tempo</th>
+                <th className="px-3 py-2 text-right font-medium">Rückstand</th>
+                <th className="px-3 py-2 text-right font-medium">Platz</th>
+                <th className="px-3 py-2 text-right font-medium">Zeit</th>
+              </tr>
+            </thead>
             <tbody>
-              {laps.map(({ track, timeMs }) => (
-                <tr key={track.id} className="border-b border-zinc-800 last:border-0 bg-zinc-900/50">
-                  <td className="px-3 py-2">
-                    <Link href={`/leaderboard/${track.id}`} className="text-white hover:text-emerald-400">
-                      {track.name}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-zinc-500">
-                    {(track.lengthM / 1000).toFixed(2)} km
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-zinc-400">
-                    {Math.round(track.lengthM / (timeMs / 1000) * 3.6)} km/h ⌀
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono font-bold text-emerald-400">
-                    {formatTimeMs(timeMs)}
-                  </td>
-                </tr>
-              ))}
+              {laps.map(({ track, timeMs }) => {
+                const standing = standingOn(track.id, timeMs);
+                const gap = standing ? timeMs - standing.bestMs : null;
+                return (
+                  <tr key={track.id} className="border-t border-zinc-800 bg-zinc-900/50">
+                    <td className="px-3 py-2">
+                      <Link href={`/leaderboard/${track.id}`} className="text-white hover:text-emerald-400">
+                        {track.name}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-zinc-500">
+                      {(track.lengthM / 1000).toFixed(2)} km
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-zinc-400">
+                      {Math.round((track.lengthM / (timeMs / 1000)) * 3.6)} km/h
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-zinc-500">
+                      {gap === null ? "—" : gap === 0 ? "Bestzeit" : `+${(gap / 1000).toFixed(2)}s`}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {standing === null ? (
+                        <span className="font-mono text-zinc-700">—</span>
+                      ) : (
+                        <Chip
+                          score={positionScore(standing.position, standing.fieldSize)}
+                          title={`Platz ${standing.position} von ${standing.fieldSize}${
+                            standing.driven ? "" : ", noch nicht gefahren"
+                          }`}
+                        >
+                          {standing.driven ? `${standing.position}.` : `(${standing.position}.)`}
+                        </Chip>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {standing === null ? (
+                        // Deliberately not green: on this table green is a
+                        // verdict, and there is nothing to judge it against yet.
+                        <span className="font-mono font-bold text-zinc-300">{formatTimeMs(timeMs)}</span>
+                      ) : (
+                        <Chip
+                          score={lapScore(timeMs, standing.bestMs)}
+                          title={`${((timeMs / standing.bestMs - 1) * 100).toFixed(1)} % über der Bestzeit`}
+                        >
+                          {formatTimeMs(timeMs)}
+                        </Chip>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
         <p className="mt-2 text-xs text-zinc-500">
-          Vorab gerechnet, ohne dass eine Zeit in die Rangliste geht. Die Simulation ist deterministisch, ein
-          gefahrenes Rennen ergibt genau diese Zeiten.
+          Platz und Zeit sind eingefärbt: dunkelgrün ist die Bestzeit, dunkelrot ein Drittel darüber oder das
+          Ende des Feldes. Eine Platzierung in Klammern ist noch nicht gefahren — es ist der Platz, den diese
+          Zeit belegen würde. Ohne Farbe heißt: auf dieser Strecke ist noch keine Zeit gesetzt.
+        </p>
+        <p className="mt-1 text-xs text-zinc-500">
+          Die Simulation ist deterministisch: ein gefahrenes Rennen ergibt genau diese Zeiten, das Ansehen
+          allein trägt aber keine Zeit in die Rangliste ein.
         </p>
       </section>
     </div>
