@@ -70,58 +70,76 @@ export function ChampionshipRunner({
     onRoundFinished(finishedRound);
   }
 
+  // Who won the round that has just come home, for the header.
+  const roundWinner = finishedRound
+    ? getCar([...finishedRound].sort((a, b) => a.timeMs - b.timeMs)[0]?.carId ?? "")
+    : undefined;
+  const roundWinnerTimeMs = finishedRound
+    ? Math.min(...finishedRound.map((r) => r.timeMs))
+    : 0;
+
   return (
     <div className="mt-6 flex flex-col gap-8">
-      {/* The step out of the round sits at the top and follows the page, so it
-          is reachable the moment the field is home instead of below the whole
-          result. */}
-      {finishedRound && (
-        <div className="sticky top-2 z-20 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-emerald-700 bg-emerald-950/90 px-4 py-3 backdrop-blur">
-          <div className="text-sm text-zinc-300">
-            <span className="font-semibold text-white">Lauf {roundNumber} im Ziel</span>
-            {track && <span className="text-zinc-400"> · {track.name}</span>}
-            <span className="text-zinc-400"> · Stand vorläufig gewertet</span>
-          </div>
-          {/* The table is a long way down past thirty cars, so the bar carries
-              the way there as well as the way on. */}
-          <a
-            href="#meisterschaftsstand"
-            className="rounded-full border border-emerald-700 px-4 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-500 hover:text-white"
-          >
-            Zum Stand ↓
-          </a>
-          <button
-            type="button"
-            onClick={confirmRound}
-            className="ml-auto rounded-full bg-emerald-500 px-5 py-2 font-semibold text-zinc-950 hover:bg-emerald-400"
-          >
-            {roundNumber < lastRound ? "Lauf werten und weiter" : "Meisterschaft abschließen"}
-          </button>
-        </div>
-      )}
-
       {!done && track && (
-        <section>
-          <div className="flex flex-wrap items-baseline gap-3">
-            <h2 className="text-lg font-bold text-white">
-              Lauf {roundNumber} von {lastRound}: {track.name}
-            </h2>
-            <span className="text-sm text-zinc-400">
-              {gridCars.length} Autos gemeinsam am Start
-              {state.rounds.length > 0 && " · aufgestellt nach dem Meisterschaftsstand"}
-            </span>
-          </div>
+        // The round header is 4.75rem tall and fixed, so the board in the
+        // runner has to stick below it rather than behind it.
+        <section style={{ "--board-top": "5.5rem" } as React.CSSProperties}>
+          {/* One header for the round, always there and always the same height:
+              which round it is on the left, and once the field is home the
+              result and the way on on the right. Filling it as the round ends
+              rather than adding a bar keeps everything below it exactly where
+              it was. */}
+          <header className="sticky top-0 z-30 -mx-6 flex h-[4.75rem] items-center gap-4 border-b border-zinc-800 bg-zinc-950/95 px-6 backdrop-blur">
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-bold text-white">
+                Lauf {roundNumber} von {lastRound}: {track.name}
+              </h2>
+              <p className="truncate text-xs text-zinc-400">
+                {gridCars.length} Autos gemeinsam am Start
+                {state.rounds.length > 0 && " · aufgestellt nach dem Meisterschaftsstand"}
+                {finishedRound && " · Stand vorläufig gewertet"}
+              </p>
+            </div>
+
+            {finishedRound && (
+              <div className="ml-auto flex shrink-0 items-center gap-4">
+                <div className="hidden min-w-0 text-right md:block">
+                  <div className="text-[11px] uppercase tracking-wide text-zinc-500">Zieleinlauf</div>
+                  <div className="truncate font-semibold text-white">
+                    {roundWinner ? `${roundWinner.make} ${roundWinner.model}` : "—"}
+                  </div>
+                </div>
+                <div className="font-mono text-xl text-emerald-400">{formatTimeMs(roundWinnerTimeMs)}</div>
+                {/* The table is a long way down past thirty cars, so the header
+                    carries the way there as well as the way on. */}
+                <a
+                  href="#meisterschaftsstand"
+                  className="hidden rounded-full border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:border-zinc-500 hover:text-white sm:block"
+                >
+                  Zum Stand ↓
+                </a>
+                <button
+                  type="button"
+                  onClick={confirmRound}
+                  className="whitespace-nowrap rounded-full bg-emerald-500 px-5 py-2 font-semibold text-zinc-950 hover:bg-emerald-400"
+                >
+                  {roundNumber < lastRound ? "Lauf werten und weiter" : "Meisterschaft abschließen"}
+                </button>
+              </div>
+            )}
+          </header>
 
           {/* No list of the field here - "Dieses Rennen" names every car in
               its grid colour and keeps doing so while they run. Keyed so every
               round starts a fresh runner rather than replaying the previous
-              one's state. */}
+              one's state. The result lives in the header, so the runner does
+              not show its own. */}
           <RaceRunner
             key={state.rounds.length}
             cars={gridCars}
             track={track}
             onFinish={setFinishedRound}
-            outro={<p className="mt-3 text-sm text-zinc-400">Weiter geht es über die Leiste oben.</p>}
+            showResult={false}
           />
         </section>
       )}
@@ -139,7 +157,7 @@ export function ChampionshipRunner({
         </section>
       )}
 
-      <section id="meisterschaftsstand" className="scroll-mt-20">
+      <section id="meisterschaftsstand" className="scroll-mt-28">
         <div className="flex flex-wrap items-baseline gap-3">
           <h2 className="text-lg font-bold text-white">Meisterschaftsstand</h2>
           {finishedRound && (

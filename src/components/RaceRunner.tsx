@@ -21,6 +21,7 @@ export function RaceRunner({
   cars,
   track,
   saveTimes = true,
+  showResult = true,
   onFinish,
   outro,
 }: {
@@ -28,6 +29,10 @@ export function RaceRunner({
   track: TrackData;
   /** Off for a run that should not touch the leaderboard. */
   saveTimes?: boolean;
+  /** Off for a caller that shows the result itself - the championship carries
+   * it in its own header, and a second panel appearing under the map would
+   * push the whole page down at the moment the field comes home. */
+  showResult?: boolean;
   /** Called once with every car's time when the replay has run out. */
   onFinish?: (results: { carId: string; timeMs: number }[]) => void;
   /** Replaces the links under the result. Pass null to leave the panel bare,
@@ -134,9 +139,11 @@ export function RaceRunner({
         </button>
       )}
 
+      {error && !showResult && <p className="text-amber-400">{error}</p>}
+
       {/* The result goes to the top, where the eye already is when the last car
           comes home, rather than below every panel on the page. */}
-      {phase === "finished" && (
+      {phase === "finished" && showResult && (
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-emerald-700 bg-emerald-950/40 px-5 py-4">
           <div>
             <div className="text-xs uppercase tracking-wide text-zinc-400">Zieleinlauf</div>
@@ -264,7 +271,9 @@ export function RaceRunner({
           )}
         </div>
 
-        <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">
+        {/* Sticks below whatever fixed header the page above has - the
+            championship sets --board-top to the height of its own. */}
+        <div className="min-w-0 xl:sticky xl:top-[var(--board-top,1rem)] xl:self-start">
           <OverallBoard
             ranked={ranked}
             entries={entries}
