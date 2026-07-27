@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getCars, getTrack } from "@/lib/data";
-import { MAX_RACERS, raceColor } from "@/lib/race";
+import { MAX_RACERS } from "@/lib/race";
 import { RaceRunner } from "@/components/RaceRunner";
 
 function Race() {
@@ -34,15 +34,8 @@ function Race() {
         </span>
       </div>
 
-      <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
-        {cars.map((car, i) => (
-          <li key={car.id} className="flex items-center gap-2 text-zinc-300">
-            <span className={`h-2.5 w-2.5 rounded-full ${raceColor(i).bg}`} aria-hidden />
-            {car.make} {car.model} ({car.year})
-          </li>
-        ))}
-      </ul>
-
+      {/* No list of the field above the track: the board beside the map names
+          every car and is the thing that keeps changing. */}
       <RaceRunner cars={cars} track={track} />
     </div>
   );

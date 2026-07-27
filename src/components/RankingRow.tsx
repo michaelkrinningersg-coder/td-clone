@@ -24,6 +24,7 @@ export function RankingRow({
   podiumClass,
   brandColored,
   dense,
+  noteWidthClass,
   onDelete,
 }: {
   car: CarData | undefined;
@@ -44,17 +45,26 @@ export function RankingRow({
   highlighted?: boolean;
   /** Colours the position for places 1-3 on boards that have no grid colours. */
   podiumClass?: string;
-  /** Tints the marque column with that marque's colour. Off during a race,
-   * where the grid colours carry the meaning instead. */
+  /** Tints the marque and the car with that marque's colour. Off on the board
+   * of a running race, where the grid colours carry the meaning instead - but
+   * on for a car of this race sitting in the overall board, where the grid
+   * colour is already doing its work on the edge of the row. */
   brandColored?: boolean;
   /** Drops the spec column and tightens the margins, for a board that shares
    * its width with a second one. */
   dense?: boolean;
+  /** Width of the note column. Worth setting on a narrow board carrying short
+   * notes: every pixel the note does not need goes to the car's name, which is
+   * the column that must not be squeezed to nothing. */
+  noteWidthClass?: string;
   /** When given, the row offers to delete its recorded time. */
   onDelete?: () => void | Promise<void>;
 }) {
   const color = gridIndex >= 0 ? raceColor(gridIndex) : null;
   const hex = gridIndex >= 0 ? (colorHex ?? color!.hex) : null;
+  // What the marque and the car are written in. The grid colour keeps the edge
+  // of the row and the progress fill either way.
+  const textHex = brandColored && car ? brandColor(car.make) : hex;
   // Deleting a time cannot be undone, so the × only arms the row and a second,
   // differently-worded button does the deed.
   const [confirming, setConfirming] = useState(false);
@@ -94,8 +104,8 @@ export function RankingRow({
         </span>
 
         <span
-          className={`min-w-0 flex-1 truncate text-sm ${hex ? "" : "text-zinc-200"}`}
-          style={hex ? { color: hex } : undefined}
+          className={`min-w-0 flex-1 truncate text-sm ${textHex ? "" : "text-zinc-200"}`}
+          style={textHex ? { color: textHex } : undefined}
         >
           {car ? car.model : fallbackName}
           {car && <span className="text-zinc-600"> ’{String(car.year).slice(2)}</span>}
@@ -109,7 +119,7 @@ export function RankingRow({
 
         <span
           className={`hidden shrink-0 truncate text-right font-mono text-xs text-zinc-500 sm:block ${
-            dense ? "w-36" : "w-32"
+            noteWidthClass ?? (dense ? "w-36" : "w-32")
           }`}
         >
           {note ?? ""}

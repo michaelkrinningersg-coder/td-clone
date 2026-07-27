@@ -7,7 +7,7 @@ import { interpolateTraceAtTime, simulateRun, type SimResult } from "@/lib/physi
 import { playbackDurationMs, raceHex, rankRacers, type RacerProgress } from "@/lib/race";
 import { timeStore } from "@/lib/time-store";
 import { formatTimeMs } from "@/lib/format";
-import { LiveRanking } from "@/components/LiveRanking";
+import { OverallBoard, RaceBoard, useTrackLeaderboard } from "@/components/RaceBoards";
 import { SectorTimes } from "@/components/SectorTimes";
 import type { CarData, TrackData } from "@/lib/data";
 
@@ -119,6 +119,9 @@ export function RaceRunner({
   }
 
   const maxTraceSpeed = Math.max(1, ...sims.flatMap(({ sim }) => sim.trace.map((p) => p.speedKph)));
+  // Loaded once for both boards: the overall column lists them, and the race
+  // column reads a finished car's place on the board out of the same rows.
+  const entries = useTrackLeaderboard(track.id, savedAt);
 
   return (
     <div className="mt-6 flex flex-col gap-4">
@@ -131,119 +134,181 @@ export function RaceRunner({
         </button>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-        <svg viewBox={viewBox} className="h-80 w-full text-zinc-700">
-          <path
-            d={toSvgPath(path)}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          {progress.map((racer) => {
-            const pos = pointAtDistance(path, racer.distanceM);
-            return (
-              <circle
-                key={racer.carId}
-                cx={pos.x}
-                cy={pos.y}
-                r={strokeWidth * 3}
-                fill={raceHex(racer.gridIndex, cars.length)}
-                stroke="#09090b"
-                strokeWidth={strokeWidth * 0.6}
-              />
-            );
-          })}
-        </svg>
-      </div>
-
-      {/* Directly under the simulation, so the order on screen matches the
-          order on track. */}
-      <LiveRanking ranked={ranked} cars={cars} track={track} savedAt={savedAt} />
-
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-        <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-zinc-500">
-          <span>Geschwindigkeit über die Strecke</span>
-          <span className="font-mono text-zinc-400">{formatTimeMs(simTimeS * 1000)}</span>
-        </div>
-        <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="h-28 w-full">
-          {sims.map(({ car, sim }, i) => (
-            <polyline
-              key={car.id}
-              points={sim.trace
-                .map(
-                  (p) =>
-                    `${((p.distanceM / track.lengthM) * CHART_WIDTH).toFixed(1)},${(
-                      CHART_HEIGHT -
-                      (p.speedKph / maxTraceSpeed) * CHART_HEIGHT
-                    ).toFixed(1)}`,
-                )
-                .join(" ")}
-              fill="none"
-              stroke={raceHex(i, cars.length)}
-              strokeWidth={1.5}
-              opacity={0.9}
-            />
-          ))}
-          {phase !== "idle" &&
-            ranked.map((racer) => {
-              const x = (racer.distanceM / track.lengthM) * CHART_WIDTH;
-              return (
-                <line
-                  key={racer.carId}
-                  x1={x}
-                  x2={x}
-                  y1={0}
-                  y2={CHART_HEIGHT}
-                  stroke={raceHex(racer.gridIndex, cars.length)}
-                  strokeWidth={1}
-                  opacity={0.35}
-                />
-              );
-            })}
-        </svg>
-      </div>
-
-      {phase === "finished" && <SectorTimes runs={sims} />}
-
+      {/* The result goes to the top, where the eye already is when the last car
+          comes home, rather than below every panel on the page. */}
       {phase === "finished" && (
-        <div className="rounded-xl border border-emerald-700 bg-emerald-950/40 p-5">
-          <div className="text-sm text-zinc-400">Zieleinlauf</div>
-          <div className="mt-1 text-xl font-bold text-white">
-            {(() => {
-              const winner = cars.find((c) => c.id === ranked[0]?.carId);
-              return winner ? `${winner.make} ${winner.model}` : "—";
-            })()}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-emerald-700 bg-emerald-950/40 px-5 py-4">
+          <div>
+            <div className="text-xs uppercase tracking-wide text-zinc-400">Zieleinlauf</div>
+            <div className="mt-0.5 text-xl font-bold text-white">
+              {(() => {
+                const winner = cars.find((c) => c.id === ranked[0]?.carId);
+                return winner ? `${winner.make} ${winner.model}` : "\u2014";
+              })()}
+            </div>
           </div>
           <div className="font-mono text-2xl text-emerald-400">{formatTimeMs(ranked[0]?.totalTimeMs ?? 0)}</div>
-          {error && <p className="mt-2 text-amber-400">{error}</p>}
-          {outro !== undefined ? (
-            outro
-          ) : (
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link
-              href={`/leaderboard/${track.id}`}
-              className="rounded-full bg-emerald-500 px-5 py-2 font-semibold text-zinc-950 hover:bg-emerald-400"
-            >
-              Rangliste
-            </Link>
-            <Link
-              href="/"
-              className="rounded-full border border-zinc-700 px-5 py-2 font-semibold text-zinc-300 hover:border-zinc-500"
-            >
-              Andere Strecke
-            </Link>
-            <Link
-              href="/cars"
-              className="rounded-full border border-zinc-700 px-5 py-2 font-semibold text-zinc-300 hover:border-zinc-500"
-            >
-              Autos ändern
-            </Link>
+          {error && <p className="w-full text-amber-400">{error}</p>}
+          <div className="ml-auto">
+            {outro !== undefined ? (
+              outro
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/leaderboard/${track.id}`}
+                  className="rounded-full bg-emerald-500 px-5 py-2 font-semibold text-zinc-950 hover:bg-emerald-400"
+                >
+                  Rangliste
+                </Link>
+                <Link
+                  href="/"
+                  className="rounded-full border border-zinc-700 px-5 py-2 font-semibold text-zinc-300 hover:border-zinc-500"
+                >
+                  Andere Strecke
+                </Link>
+                <Link
+                  href="/cars"
+                  className="rounded-full border border-zinc-700 px-5 py-2 font-semibold text-zinc-300 hover:border-zinc-500"
+                >
+                  Autos ändern
+                </Link>
+              </div>
+            )}
           </div>
-          )}
         </div>
       )}
+
+      {/* The track and the race down the middle, the whole board of this track
+          as a column of its own on the right. */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_29rem]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <svg viewBox={viewBox} className="h-80 w-full text-zinc-700">
+              <path
+                d={toSvgPath(path)}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {progress.map((racer) => {
+                const pos = pointAtDistance(path, racer.distanceM);
+                return (
+                  <circle
+                    key={racer.carId}
+                    cx={pos.x}
+                    cy={pos.y}
+                    r={strokeWidth * 3}
+                    fill={raceHex(racer.gridIndex, cars.length)}
+                    stroke="#09090b"
+                    strokeWidth={strokeWidth * 0.6}
+                  />
+                );
+              })}
+            </svg>
+          </div>
+
+          {/* Directly under the simulation, so the order on screen matches the
+              order on track. */}
+          <RaceBoard ranked={ranked} cars={cars} track={track} entries={entries} />
+
+          <InfoPanel title="Geschwindigkeit über die Strecke" hint="jede Linie ein Auto">
+            <div className="p-4">
+              <div className="mb-2 text-right font-mono text-xs text-zinc-400">
+                {formatTimeMs(simTimeS * 1000)}
+              </div>
+              <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="h-28 w-full">
+                {sims.map(({ car, sim }, i) => (
+                  <polyline
+                    key={car.id}
+                    points={sim.trace
+                      .map(
+                        (p) =>
+                          `${((p.distanceM / track.lengthM) * CHART_WIDTH).toFixed(1)},${(
+                            CHART_HEIGHT -
+                            (p.speedKph / maxTraceSpeed) * CHART_HEIGHT
+                          ).toFixed(1)}`,
+                      )
+                      .join(" ")}
+                    fill="none"
+                    stroke={raceHex(i, cars.length)}
+                    strokeWidth={1.5}
+                    opacity={0.9}
+                  />
+                ))}
+                {phase !== "idle" &&
+                  ranked.map((racer) => {
+                    const x = (racer.distanceM / track.lengthM) * CHART_WIDTH;
+                    return (
+                      <line
+                        key={racer.carId}
+                        x1={x}
+                        x2={x}
+                        y1={0}
+                        y2={CHART_HEIGHT}
+                        stroke={raceHex(racer.gridIndex, cars.length)}
+                        strokeWidth={1}
+                        opacity={0.35}
+                      />
+                    );
+                  })}
+              </svg>
+            </div>
+          </InfoPanel>
+
+          {phase === "finished" && (
+            <InfoPanel title="Sektorzeiten" hint="Bestzeit je Sektor hervorgehoben">
+              <SectorTimes runs={sims} />
+            </InfoPanel>
+          )}
+        </div>
+
+        <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">
+          <OverallBoard
+            ranked={ranked}
+            entries={entries}
+            track={track}
+            fieldSize={cars.length}
+            bodyClassName="max-h-[calc(100vh-7rem)]"
+          />
+        </div>
+      </div>
     </div>
+  );
+}
+
+/** A panel that stays shut until it is asked for. The map, the board and the
+ * result are what a race is about; the traces and the splits are for whoever
+ * wants to know why, so they wait behind their own title. */
+function InfoPanel({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="group overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 hover:text-zinc-200 [&::-webkit-details-marker]:hidden">
+        <span
+          aria-hidden
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-zinc-600 font-serif text-[10px] leading-none text-zinc-400 group-open:border-emerald-500 group-open:text-emerald-400"
+        >
+          i
+        </span>
+        {title}
+        {hint && <span className="truncate font-normal normal-case tracking-normal text-zinc-600">{hint}</span>}
+        <span className="ml-auto shrink-0 font-normal normal-case tracking-normal text-zinc-600 group-open:hidden">
+          einblenden
+        </span>
+        <span className="ml-auto hidden shrink-0 font-normal normal-case tracking-normal text-zinc-600 group-open:inline">
+          ausblenden
+        </span>
+      </summary>
+      <div className="border-t border-zinc-800">{children}</div>
+    </details>
   );
 }
