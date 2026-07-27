@@ -248,6 +248,28 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
         )}
       </section>
 
+      {/* Between the two sections rather than under them: the page arrives
+          dealt, so the way out belongs where the reading stops being
+          necessary - after the field, before the calendar anyone who is happy
+          with it never has to look at. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => onStart(field, calendar)}
+          disabled={field.length < 2 || calendar.length === 0}
+          className="rounded-full bg-emerald-500 px-6 py-3 font-semibold text-zinc-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Meisterschaft starten
+        </button>
+        <p className="text-sm text-zinc-500">
+          {field.length < 2
+            ? "Mindestens zwei Autos ins Feld."
+            : calendar.length === 0
+              ? "Mindestens eine Strecke in den Kalender."
+              : `${field.length} Autos · ${calendar.length} ${calendar.length === 1 ? "Lauf" : "Läufe"}`}
+        </p>
+      </div>
+
       <section>
         <div className="flex flex-wrap items-baseline gap-3">
           <h2 className="text-lg font-bold text-white">2. Kalender — {calendar.length} Läufe</h2>
@@ -314,23 +336,6 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
         </ol>
       </section>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => onStart(field, calendar)}
-          disabled={field.length < 2 || calendar.length === 0}
-          className="rounded-full bg-emerald-500 px-6 py-3 font-semibold text-zinc-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Meisterschaft starten
-        </button>
-        <p className="text-sm text-zinc-500">
-          {field.length < 2
-            ? "Mindestens zwei Autos ins Feld."
-            : calendar.length === 0
-              ? "Mindestens eine Strecke in den Kalender."
-              : `${field.length} Autos · ${calendar.length} ${calendar.length === 1 ? "Lauf" : "Läufe"}`}
-        </p>
-      </div>
     </div>
   );
 }
