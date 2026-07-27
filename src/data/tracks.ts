@@ -1,4 +1,5 @@
 import type { Segment, TrackDefinition, TurnDirection } from "@/lib/track-types";
+import { circuitFromOutline, type OutlineVertex } from "@/lib/track-outline";
 
 function straight(lengthM: number, gradientPercent = 0): Segment {
   return { kind: "straight", lengthM, gradientPercent };
@@ -27,10 +28,82 @@ function switchbacks(
   return segs;
 }
 
-// All circuits below are loosely modeled on public knowledge of the real tracks'
-// approximate length, corner sequence/character, turn directions and elevation
-// profile. They are hand-authored approximations, not exact geodata - the drawn
-// outline is a likeness, and a lap will not close perfectly back on itself.
+/** The circuits are drawn as the closed shapes they are and the segment list is
+ * derived from the outline, rather than written out corner by corner.
+ *
+ * Written out corner by corner, nothing tied the last corner back to the first:
+ * a lap never came back to where it started, and Monaco turned through 588
+ * degrees and finished 1.8 km from the line. Drawn as a shape, the lap closes
+ * because the shape does, and the radii the physics uses are the radii of the
+ * line on screen.
+ *
+ * The shapes are drawn by eye from the real layouts - corner order, character,
+ * turn direction and gradients - and then scaled to the circuit's real length.
+ * They are a likeness, not survey data.
+ *
+ * Pikes Peak stays a segment list: it is a hillclimb, not a lap, and has no
+ * business closing. */
+
+// Monaco, clockwise: pit straight up the left, the climb to Casino across the
+// top, the hairpin doubling back on itself, then the tunnel and the harbour
+// section down the right.
+const MONACO: OutlineVertex[] = [
+  { x: 0, y: 0, radiusM: 60, name: "Start/Ziel", gradientPercent: 1 },
+  { x: 55, y: 330, radiusM: 18, name: "Sainte Devote", gradientPercent: 7 },
+  { x: 175, y: 520, radiusM: 120, name: "Beau Rivage", gradientPercent: 7 },
+  { x: 250, y: 700, radiusM: 35, name: "Massenet", gradientPercent: 2 },
+  { x: 430, y: 690, radiusM: 28, name: "Casino", gradientPercent: -3 },
+  { x: 495, y: 590, radiusM: 20, name: "Mirabeau", gradientPercent: -6 },
+  { x: 435, y: 515, radiusM: 10, name: "Fairmont-Haarnadel", gradientPercent: -6 },
+  { x: 452, y: 570, radiusM: 18, name: "Mirabeau bas", gradientPercent: -5 },
+  { x: 585, y: 520, radiusM: 22, name: "Portier", gradientPercent: -2 },
+  { x: 760, y: 470, radiusM: 140, name: "Tunnel" },
+  { x: 905, y: 300, radiusM: 14, name: "Nouvelle Chicane" },
+  { x: 855, y: 250, radiusM: 45, name: "Tabac" },
+  { x: 800, y: 150, radiusM: 20, name: "Piscine Einfahrt" },
+  { x: 700, y: 115, radiusM: 18, name: "Piscine Ausfahrt" },
+  { x: 655, y: 45, radiusM: 10, name: "La Rascasse" },
+  { x: 560, y: 75, radiusM: 22, name: "Anthony Noghes", gradientPercent: 1 },
+];
+
+// Monza, clockwise: main straight up the left, Curva Grande across the top, the
+// Lesmos, the Serraglio down the right, Ascari, and the Parabolica sweeping
+// back onto the line. Almost flat throughout.
+const MONZA: OutlineVertex[] = [
+  { x: 0, y: 0, radiusM: 260, name: "Start/Ziel" },
+  { x: 0, y: 1150, radiusM: 20, name: "Variante del Rettifilo" },
+  { x: 95, y: 1245, radiusM: 22, name: "Rettifilo Ausfahrt" },
+  { x: 250, y: 1720, radiusM: 175, name: "Curva Grande" },
+  { x: 545, y: 1990, radiusM: 24, name: "Variante della Roggia" },
+  { x: 640, y: 1935, radiusM: 26, name: "Roggia Ausfahrt" },
+  { x: 930, y: 2120, radiusM: 80, name: "Lesmo 1" },
+  { x: 1045, y: 2035, radiusM: 65, name: "Lesmo 2" },
+  { x: 1180, y: 1290, radiusM: 400, name: "Serraglio" },
+  { x: 1245, y: 880, radiusM: 50, name: "Variante Ascari" },
+  { x: 1155, y: 800, radiusM: 55, name: "Ascari Ausfahrt" },
+  { x: 1215, y: 210, radiusM: 150, name: "Parabolica" },
+  { x: 900, y: -195, radiusM: 220, name: "Parabolica Scheitel" },
+  { x: 320, y: -160, radiusM: 260, name: "Parabolica Ausfahrt" },
+];
+
+// Spa, clockwise: pit straight up the right, La Source doubling back into the
+// Eau Rouge dip, the Kemmel climb away to Les Combes, then the long descent
+// through the forest to Stavelot and Blanchimont back to the Bus Stop.
+const SPA: OutlineVertex[] = [
+  { x: 0, y: 0, radiusM: 250, name: "Start/Ziel", gradientPercent: 3 },
+  { x: 0, y: 330, radiusM: 13, name: "La Source", gradientPercent: -6 },
+  { x: 95, y: 95, radiusM: 70, name: "Eau Rouge", gradientPercent: 12 },
+  { x: 260, y: 175, radiusM: 90, name: "Raidillon", gradientPercent: 12 },
+  { x: 890, y: 720, radiusM: 55, name: "Les Combes", gradientPercent: -2 },
+  { x: 1010, y: 645, radiusM: 45, name: "Malmedy", gradientPercent: -4 },
+  { x: 1330, y: 575, radiusM: 22, name: "Rivage", gradientPercent: -5 },
+  { x: 1270, y: 330, radiusM: 110, name: "Pouhon", gradientPercent: -4 },
+  { x: 1520, y: 80, radiusM: 60, name: "Fagnes", gradientPercent: -2 },
+  { x: 1470, y: -230, radiusM: 45, name: "Stavelot", gradientPercent: 2 },
+  { x: 1130, y: -420, radiusM: 300, name: "Blanchimont", gradientPercent: 3 },
+  { x: 230, y: -250, radiusM: 20, name: "Bus-Stop-Schikane", gradientPercent: 2 },
+  { x: 140, y: -175, radiusM: 22, name: "Bus Stop Ausfahrt", gradientPercent: 2 },
+];
 
 export const tracks: TrackDefinition[] = [
   { name: "Sprint 250m", type: "SPRINT", segments: [straight(250)] },
@@ -38,98 +111,9 @@ export const tracks: TrackDefinition[] = [
   { name: "Sprint 1000m", type: "SPRINT", segments: [straight(1000)] },
   { name: "Sprint 2000m", type: "SPRINT", segments: [straight(2000)] },
 
-  {
-    name: "Monza",
-    type: "CIRCUIT",
-    // ~5.8km, fast, only 11 corners, almost no elevation change. Runs clockwise.
-    segments: [
-      straight(1150),
-      corner(20, 25, "right"), // Variante del Rettifilo, part 1
-      corner(20, 25, "left"), // Variante del Rettifilo, part 2
-      straight(300),
-      corner(200, 180, "right"), // Curva Grande
-      straight(400),
-      corner(30, 30, "left"), // Variante della Roggia, part 1
-      corner(30, 30, "right"), // Variante della Roggia, part 2
-      straight(700),
-      corner(120, 90, "right"), // Lesmo 1
-      straight(150),
-      corner(100, 70, "right"), // Lesmo 2
-      straight(950),
-      corner(50, 60, "left"), // Variante Ascari, part 1
-      corner(50, 60, "right"), // Variante Ascari, part 2
-      corner(50, 60, "left"), // Variante Ascari, part 3
-      straight(1150),
-      corner(250, 200, "right"), // Parabolica
-      straight(130),
-    ],
-  },
-
-  {
-    name: "Spa-Francorchamps",
-    type: "CIRCUIT",
-    // ~7km, ~19 corners, ~100m elevation change (Eau Rouge climb), long Kemmel
-    // straight. Runs clockwise.
-    segments: [
-      straight(700),
-      corner(35, 15, "right", -2), // La Source hairpin
-      straight(250, -6), // downhill toward Eau Rouge
-      corner(90, 150, "left", 12), // Eau Rouge, steep uphill
-      corner(90, 150, "right", 12), // Raidillon
-      straight(1700, 3), // Kemmel straight, gently uphill
-      corner(90, 80, "right"), // Les Combes
-      straight(300, -4),
-      corner(60, 45, "right"), // Malmedy
-      straight(500, -5), // downhill toward Rivage
-      corner(50, 30, "right"), // Rivage hairpin
-      straight(900),
-      corner(220, 170, "left"), // Pouhon
-      straight(400),
-      corner(35, 50, "right"), // Fagnes, part 1
-      corner(35, 50, "left"), // Fagnes, part 2
-      straight(350),
-      corner(90, 70, "right"), // Stavelot
-      straight(600, 4),
-      corner(200, 180, "left"), // Blanchimont
-      straight(200, 2),
-      corner(22, 20, "right"), // Bus Stop chicane, part 1
-      corner(23, 20, "left"), // Bus Stop chicane, part 2
-      straight(65),
-    ],
-  },
-
-  {
-    name: "Monaco",
-    type: "CIRCUIT",
-    // ~3.3km, 19 corners, the tightest and slowest track. Runs clockwise, which
-    // is why almost every corner is a right-hander. Climbs to Casino, then drops
-    // back down to the harbour tunnel.
-    segments: [
-      straight(400),
-      corner(30, 20, "right"), // Sainte Devote
-      straight(300, 8), // climb up Beau Rivage
-      corner(40, 35, "left", 6), // Massenet
-      corner(35, 18, "right"), // Casino Square
-      straight(150, -3),
-      corner(30, 15, "right"), // Mirabeau
-      corner(25, 12, "right", -6), // Fairmont Hairpin
-      straight(200, -4),
-      corner(45, 30, "right"), // Portier
-      straight(650), // the tunnel, flat and fast
-      corner(30, 50, "right"), // Nouvelle Chicane, part 1
-      corner(30, 50, "left"), // Nouvelle Chicane, part 2
-      straight(400),
-      corner(50, 40, "left"), // Tabac
-      straight(200),
-      corner(30, 15, "left"), // Swimming Pool entry
-      corner(35, 18, "right"), // Swimming Pool exit
-      straight(200),
-      corner(25, 12, "right"), // La Rascasse
-      straight(100),
-      corner(40, 25, "right"), // Anthony Noghes
-      straight(250),
-    ],
-  },
+  { name: "Monza", type: "CIRCUIT", segments: circuitFromOutline(MONZA, 5793) },
+  { name: "Spa-Francorchamps", type: "CIRCUIT", segments: circuitFromOutline(SPA, 7004) },
+  { name: "Monaco", type: "CIRCUIT", segments: circuitFromOutline(MONACO, 3337) },
 
   {
     name: "Pikes Peak Hillclimb",

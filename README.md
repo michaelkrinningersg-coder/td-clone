@@ -91,14 +91,28 @@ Vorwärtslauf beschleunigt dazwischen.
 
 **Steigung.** Reine Physik (`g · sin θ`).
 
-Strecken sind Segmentfolgen (Gerade / Kurve mit Radius, Richtung und optionaler Steigung)
-in `src/data/tracks.ts`, angelehnt an die realen Eckdaten von Monza, Spa, Monaco und
-Pikes Peak — plus vier reine Sprintstrecken.
+## Strecken
 
-Die Kurvenrichtung ist reine Zeichen-Information und geht **nicht** in die Zeit ein — sie
-sorgt dafür, dass jede Strecke ihre eigene wiedererkennbare Form bekommt statt eines
-generischen Zickzacks. Da die Segmentdaten Näherungen sind, ist die gezeichnete Linie
-eine stilisierte Ähnlichkeit und schließt sich nicht exakt zur Runde.
+Die drei Rundkurse in `src/data/tracks.ts` sind als **geschlossene Umrisse** hinterlegt —
+eine Punktfolge in Metern mit dem Kurvenradius an jedem Punkt. Daraus leitet
+`src/lib/track-outline.ts` die Segmentliste ab: jede Ecke wird durch einen Bogen ersetzt,
+der beide Schenkel berührt.
+
+Vorher waren die Strecken Kurve für Kurve aufgeschrieben, und nichts band die letzte
+Kurve an die erste zurück: keine Runde schloss sich, Monaco drehte sich um 588° statt 360°
+und endete 1,8 km neben der Linie. Als Umriss gezeichnet schließt die Runde, weil die Form
+es tut — und die Radien, mit denen die Physik rechnet, sind die Radien der gezeichneten
+Linie. Ein Test hält für jeden Kurs fest, dass die Lücke unter einem Meter bleibt.
+
+Die Umrisse sind nach den echten Layouts von Hand gezeichnet (Kurvenfolge, Charakter,
+Drehrichtung, Steigungen) und anschließend auf die reale Streckenlänge skaliert. Sie sind
+eine Ähnlichkeit, keine Vermessung.
+
+Pikes Peak bleibt eine Segmentliste: ein Bergrennen ist keine Runde und hat sich nicht zu
+schließen. Dazu kommen vier reine Sprintstrecken.
+
+Die Kurvenrichtung geht **nicht** in die Zeit ein — sie entscheidet nur, wohin sich die
+Linie dreht.
 
 ## Tests
 
