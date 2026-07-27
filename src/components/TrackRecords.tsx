@@ -40,9 +40,9 @@ export function TrackRecords() {
   const driven = records?.filter((r) => r.best !== null).length ?? 0;
 
   return (
-    <section className="mt-10">
-      <h2 className="text-lg font-bold text-white">Streckenrekorde</h2>
-      <p className="mt-1 text-sm text-zinc-400">
+    // The tab carries the title, so the board starts with what it is showing.
+    <section className="mt-6">
+      <p className="text-sm text-zinc-400">
         {records === null
           ? "Lade Zeiten..."
           : `${driven} von ${tracks.length} Strecken haben eine Bestzeit.`}

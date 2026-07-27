@@ -180,7 +180,7 @@ export function RaceRunner({
 
       {/* The track and the race down the middle, the whole board of this track
           as a column of its own on the right. */}
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_29rem]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_32rem] 2xl:grid-cols-[minmax(0,1fr)_36rem]">
         <div className="flex min-w-0 flex-col gap-4">
           <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 p-4">
             <svg viewBox={viewBox} className="h-80 w-full text-zinc-700">

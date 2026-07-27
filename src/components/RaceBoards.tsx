@@ -203,7 +203,7 @@ function OverallRows({
           highlighted={row.gridIndex >= 0}
           brandColored
           dense
-          noteWidthClass="w-24"
+          noteWidthClass="w-20"
         />
       ))}
     </ol>

@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { getCar, getTrack } from "@/lib/data";
 import { brandColor } from "@/lib/brand-colors";
 import { formatTimeMs } from "@/lib/format";
-import { raceHex } from "@/lib/race";
 import {
   championshipStandings,
   currentTrackId,
@@ -113,25 +112,10 @@ export function ChampionshipRunner({
             </span>
           </div>
 
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {gridCars.map((car, i) => (
-              <span
-                key={car.id}
-                className="flex items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300"
-              >
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: raceHex(i, gridCars.length) }}
-                  aria-hidden
-                />
-                <span style={{ color: brandColor(car.make) }}>{car.make}</span>
-                {car.model}
-              </span>
-            ))}
-          </div>
-
-          {/* Keyed so every round starts a fresh runner rather than replaying
-              the previous one's state. */}
+          {/* No list of the field here - "Dieses Rennen" names every car in
+              its grid colour and keeps doing so while they run. Keyed so every
+              round starts a fresh runner rather than replaying the previous
+              one's state. */}
           <RaceRunner
             key={state.rounds.length}
             cars={gridCars}

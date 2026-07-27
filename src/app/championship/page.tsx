@@ -13,7 +13,7 @@ export default function ChampionshipPage() {
   const { state, ready, start, finishRound, abandon } = useChampionship();
 
   return (
-    <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
+    <div className="mx-auto w-full max-w-[100rem] flex-1 px-6 py-10">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold text-white">Meisterschaft</h1>
         {state && (

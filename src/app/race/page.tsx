@@ -16,7 +16,7 @@ function Race() {
 
   if (cars.length === 0 || !track) {
     return (
-      <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
+      <div className="mx-auto w-full max-w-[100rem] flex-1 px-6 py-10">
         <p className="text-zinc-400">Auto oder Strecke nicht gefunden.</p>
         <Link href="/" className="mt-4 inline-block text-emerald-400 hover:text-emerald-300">
           ← Zur Autoauswahl
@@ -26,7 +26,7 @@ function Race() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
+    <div className="mx-auto w-full max-w-[100rem] flex-1 px-6 py-10">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-2xl font-bold text-white">{track.name}</h1>
         <span className="text-sm text-zinc-500">

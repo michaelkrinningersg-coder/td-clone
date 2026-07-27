@@ -96,7 +96,7 @@ export function RankingRow({
       <div className="relative flex items-center gap-3">
         <span
           className={`shrink-0 truncate text-xs font-medium uppercase tracking-wide text-zinc-500 ${
-            dense ? "w-20" : "w-24 sm:w-32"
+            dense ? "w-28" : "w-24 sm:w-32"
           }`}
           style={brandColored && car ? { color: brandColor(car.make) } : undefined}
         >
