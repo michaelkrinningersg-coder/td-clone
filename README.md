@@ -64,13 +64,32 @@ anderen Einsatzzweck wäre das vorab zu klären.
 
 ## Physik
 
-`src/lib/physics.ts` — kalibriert pro Auto aus genau zwei realen Werten:
+`src/lib/physics.ts` rechnet Schritt für Schritt über die Strecke. Jeder Wert kommt
+entweder aus dem Datensatz oder ist eine offen benannte Konstante — geschätzte
+Einzelwerte pro Auto gibt es nicht.
 
-- **Beschleunigung**: `v(t) = v_top · tanh(a_ref · t / v_top)`, wobei `a_ref` so gelöst
-  wird, dass die Kurve exakt die reale 0-100-km/h-Zeit trifft.
-- **Kurven**: Grenzgeschwindigkeit aus Kurvenradius, Leistungsgewicht, Drehmoment/Gewicht
-  und Antriebsart (AWD leicht im Vorteil, FWD leicht im Nachteil).
-- **Steigung**: reine Physik (`g · sin θ`), gewichtsunabhängig.
+**Antrieb.** Nenndrehzahl aus `P = M · ω`: der Datensatz führt keine Drehzahlen, aber
+Leistung und Drehmoment implizieren eine. Das trennt den Turbodiesel (Golf GTD ~3.500/min)
+vom hochdrehenden Sauger (S2000 ~8.100/min) und trifft die realen Werte erstaunlich gut
+(Chiron 6.719 gegen real 6.700). Daraus folgen Drehmomentverlauf und Gangstufen: der
+oberste Gang liegt dort, wo der Motor gegen die Luft ausläuft, die übrigen geometrisch
+darunter. Die Form der Drehmomentkurve hängt am Motorcharakter — ein breit auslegender
+Motor zieht unten heraus, ein spitzer hält oben länger.
+
+**Grenzen nach oben.** Kein festes Tempolimit. Ein Auto läuft, bis der Luftwiderstand
+(cw × Stirnfläche) es einholt oder der Drehzahlbegrenzer im obersten Gang greift. Die
+angegebene Höchstgeschwindigkeit sagt, wie der Hersteller das Auto gezügelt hat, nicht was
+es kann, und geht deshalb nicht ins Modell ein.
+
+**Kalibrierung.** Der einzige gelöste Parameter ist die Traktionsgrenze beim Start: sie
+wird so bestimmt, dass die Simulation die reale 0-100-km/h-Zeit trifft.
+
+**Bremsen und Kurven.** Verzögerung aus der verbauten Bremse (belüftete Scheibe / Scheibe /
+Trommel, vorn schwerer gewichtet). Kurventempo aus Radius, Reifenbreite je Tonne und
+Antriebsart. Ein Rückwärtslauf über die Strecke setzt daraus die Bremspunkte, ein
+Vorwärtslauf beschleunigt dazwischen.
+
+**Steigung.** Reine Physik (`g · sin θ`).
 
 Strecken sind Segmentfolgen (Gerade / Kurve mit Radius, Richtung und optionaler Steigung)
 in `src/data/tracks.ts`, angelehnt an die realen Eckdaten von Monza, Spa, Monaco und
@@ -87,9 +106,9 @@ eine stilisierte Ähnlichkeit und schließt sich nicht exakt zur Runde.
 npm test
 ```
 
-Deckt die Kalibrierung der Beschleunigungskurve (trifft die reale 0-100-Zeit, überschreitet
-nie den Top-Speed), das Kurven- und Steigungsverhalten sowie den CarQuery-Importfilter ab —
-insbesondere, dass ein Auto mit fehlendem Wert wirklich verworfen und nicht geschätzt wird.
+Deckt Motor- und Getriebemodell, die Kalibrierung auf die reale 0-100-Zeit, Bremsen,
+Kurven, Steigungen, Wertungen und den Importfilter ab — insbesondere, dass ein Auto mit
+fehlendem oder unmöglichem Wert wirklich verworfen und nicht geschätzt wird.
 
 ## Deployment
 
