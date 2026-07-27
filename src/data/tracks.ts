@@ -7,21 +7,44 @@ import {
 } from "@/lib/track-polyline";
 import {
   AUSTIN_OUTLINE,
+  BAHRAIN_OUTLINE,
   BAKU_OUTLINE,
+  BARCELONA_OUTLINE,
+  BUENOS_AIRES_OUTLINE,
+  ESTORIL_OUTLINE,
+  HOCKENHEIM_OUTLINE,
   HUNGARORING_OUTLINE,
   IMOLA_OUTLINE,
+  INDIANAPOLIS_OUTLINE,
   INTERLAGOS_OUTLINE,
+  ISTANBUL_OUTLINE,
+  JACAREPAGUA_OUTLINE,
   JEDDAH_OUTLINE,
+  KYALAMI_OUTLINE,
+  LAS_VEGAS_OUTLINE,
+  LOSAIL_OUTLINE,
+  MADRID_OUTLINE,
+  MAGNY_COURS_OUTLINE,
+  MELBOURNE_OUTLINE,
   MEXIKO_OUTLINE,
+  MIAMI_OUTLINE,
   MONACO_OUTLINE,
   MONTREAL_OUTLINE,
   MONZA_OUTLINE,
   MUGELLO_OUTLINE,
+  NUERBURGRING_OUTLINE,
+  PAUL_RICARD_OUTLINE,
+  PORTIMAO_OUTLINE,
   RED_BULL_RING_OUTLINE,
+  SEPANG_OUTLINE,
+  SHANGHAI_OUTLINE,
   SILVERSTONE_OUTLINE,
   SINGAPUR_OUTLINE,
+  SOCHI_OUTLINE,
   SPA_FRANCORCHAMPS_OUTLINE,
   SUZUKA_OUTLINE,
+  WATKINS_GLEN_OUTLINE,
+  YAS_MARINA_OUTLINE,
   ZANDVOORT_OUTLINE,
 } from "@/data/track-outlines";
 
@@ -130,6 +153,53 @@ const ZANDVOORT_GRADIENTS: GradientBand[] = [
   { from: 0.15, to: 0.4, percent: -2 },
   { from: 0.4, to: 0.75, percent: 2 },
   { from: 0.75, to: 1, percent: -2 },
+];
+
+/** Portimão is the roller coaster of the calendar: blind crests, a plunge to
+ * the bottom of the valley and a long climb back to the line, about 40 m. */
+const PORTIMAO_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.12, percent: -5 },
+  { from: 0.12, to: 0.3, percent: 6 },
+  { from: 0.3, to: 0.5, percent: -7 },
+  { from: 0.5, to: 0.72, percent: 5 },
+  { from: 0.72, to: 0.88, percent: -6 },
+  { from: 0.88, to: 1, percent: 7 },
+];
+
+/** The Nürburgring's GP circuit - not the Nordschleife - climbs out of the
+ * Mercedes-Arena and drops back down through the Veedol chicane. */
+const NUERBURGRING_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.15, percent: -3 },
+  { from: 0.15, to: 0.45, percent: 5 },
+  { from: 0.45, to: 0.7, percent: 2 },
+  { from: 0.7, to: 1, percent: -3 },
+];
+
+/** Watkins Glen runs up the hill through the esses and back down the boot. */
+const WATKINS_GLEN_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.2, percent: 4 },
+  { from: 0.2, to: 0.45, percent: 6 },
+  { from: 0.45, to: 0.75, percent: -4 },
+  { from: 0.75, to: 1, percent: -3 },
+];
+
+/** Kyalami climbs all the way up the back to Leeukop and drops down the
+ * main straight - the reason the old circuit was known for its long haul. */
+const KYALAMI_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.15, percent: -4 },
+  { from: 0.15, to: 0.55, percent: 3 },
+  { from: 0.55, to: 0.8, percent: 6 },
+  { from: 0.8, to: 1, percent: -5 },
+];
+
+/** Istanbul drops away downhill into the quadruple-apex turn eight and climbs
+ * back to the line. */
+const ISTANBUL_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.1, percent: -6 },
+  { from: 0.1, to: 0.35, percent: 3 },
+  { from: 0.35, to: 0.6, percent: -4 },
+  { from: 0.6, to: 0.85, percent: 4 },
+  { from: 0.85, to: 1, percent: 2 },
 ];
 
 function circuit(name: string, outline: [number, number][], gradients?: GradientBand[]): TrackDefinition {
@@ -332,6 +402,29 @@ export const tracks: TrackDefinition[] = [
   circuit("Mugello", MUGELLO_OUTLINE, MUGELLO_GRADIENTS),
   circuit("Jeddah", JEDDAH_OUTLINE),
   circuit("Mexiko-Stadt", MEXIKO_OUTLINE),
+  circuit("Bahrain", BAHRAIN_OUTLINE),
+  circuit("Shanghai", SHANGHAI_OUTLINE),
+  circuit("Istanbul", ISTANBUL_OUTLINE, ISTANBUL_GRADIENTS),
+  circuit("Sepang", SEPANG_OUTLINE),
+  circuit("Melbourne", MELBOURNE_OUTLINE),
+  circuit("Portimão", PORTIMAO_OUTLINE, PORTIMAO_GRADIENTS),
+  circuit("Barcelona", BARCELONA_OUTLINE),
+  circuit("Hockenheim", HOCKENHEIM_OUTLINE),
+  circuit("Nürburgring GP", NUERBURGRING_OUTLINE, NUERBURGRING_GRADIENTS),
+  circuit("Yas Marina", YAS_MARINA_OUTLINE),
+  circuit("Paul Ricard", PAUL_RICARD_OUTLINE),
+  circuit("Las Vegas", LAS_VEGAS_OUTLINE),
+  circuit("Watkins Glen", WATKINS_GLEN_OUTLINE, WATKINS_GLEN_GRADIENTS),
+  circuit("Indianapolis", INDIANAPOLIS_OUTLINE),
+  circuit("Kyalami", KYALAMI_OUTLINE, KYALAMI_GRADIENTS),
+  circuit("Estoril", ESTORIL_OUTLINE),
+  circuit("Magny-Cours", MAGNY_COURS_OUTLINE),
+  circuit("Losail", LOSAIL_OUTLINE),
+  circuit("Miami", MIAMI_OUTLINE),
+  circuit("Sochi", SOCHI_OUTLINE),
+  circuit("Madrid", MADRID_OUTLINE),
+  circuit("Buenos Aires", BUENOS_AIRES_OUTLINE),
+  circuit("Jacarepaguá", JACAREPAGUA_OUTLINE),
   circuit("Handlingkurs", handlingCourse(2000)),
   circuit("Kreisbahn 200 m", circleOutline(200)),
   circuit("Stadtkurs eng", cityLoop(2500)),
