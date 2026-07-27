@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { formatGap, playbackDurationMs, rankRacers, type RacerProgress } from "./race";
+import {
+  formatGap,
+  playbackDurationMs,
+  raceHex,
+  rankRacers,
+  RACE_COLORS,
+  type RacerProgress,
+} from "./race";
 
 let nextGrid = 0;
 function racer(carId: string, distanceM: number, opts: Partial<RacerProgress> = {}): RacerProgress {
@@ -15,6 +22,26 @@ function racer(carId: string, distanceM: number, opts: Partial<RacerProgress> = 
     ...opts,
   };
 }
+
+describe("raceHex", () => {
+  it("uses the racing palette for a field it can cover", () => {
+    assert.equal(raceHex(0, 8), RACE_COLORS[0].hex);
+    assert.equal(raceHex(7, 8), RACE_COLORS[7].hex);
+  });
+
+  it("gives every car of a big field its own colour", () => {
+    const hexes = Array.from({ length: 30 }, (_, i) => raceHex(i, 30));
+    assert.equal(new Set(hexes).size, 30);
+  });
+
+  it("keeps neighbouring grid slots far apart in hue", () => {
+    const hue = (h: string) => Number(h.match(/hsl\((\d+)/)![1]);
+    for (let i = 0; i < 10; i++) {
+      const step = Math.abs(hue(raceHex(i, 30)) - hue(raceHex(i + 1, 30)));
+      assert.ok(Math.min(step, 360 - step) > 40, `slots ${i} and ${i + 1} are only ${step} apart`);
+    }
+  });
+});
 
 describe("rankRacers", () => {
   it("ranks cars still on track by distance covered", () => {

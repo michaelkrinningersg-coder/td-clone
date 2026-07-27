@@ -4,37 +4,35 @@ import { useMemo, useState } from "react";
 import { getCar, getTrack } from "@/lib/data";
 import { brandColor } from "@/lib/brand-colors";
 import { formatTimeMs } from "@/lib/format";
-import { raceColor } from "@/lib/race";
+import { raceHex } from "@/lib/race";
 import {
   championshipStandings,
-  currentHeat,
-  currentHeatPositions,
   currentTrackId,
-  heatCount,
+  gridOrder,
   isFinished,
+  type CarResult,
   type ChampionshipState,
-  type HeatResult,
 } from "@/lib/championship";
 import { RaceRunner } from "@/components/RaceRunner";
 
 const PODIUM = ["text-amber-300", "text-zinc-300", "text-orange-400"];
 
-/** A championship in progress: the heat on track, then the table.
+/** A championship in progress: the whole field on track, then the table.
  *
  * Times are written to the ordinary leaderboards as well - a lap driven is a
  * lap driven, and a championship should feed the records rather than run in a
  * parallel world. */
 export function ChampionshipRunner({
   state,
-  onHeatFinished,
+  onRoundFinished,
 }: {
   state: ChampionshipState;
-  onHeatFinished: (results: HeatResult[]) => void;
+  onRoundFinished: (results: CarResult[]) => void;
 }) {
-  // A finished heat is held here until it is confirmed rather than filed at
-  // once: committing it changes the state, which swaps in the next heat, and
+  // A finished round is held here until it is confirmed rather than filed at
+  // once: committing it changes the state, which swaps in the next track, and
   // the result would be gone before anyone had read it.
-  const [finishedHeat, setFinishedHeat] = useState<HeatResult[] | null>(null);
+  const [finishedRound, setFinishedRound] = useState<CarResult[] | null>(null);
 
   const standings = useMemo(
     () => championshipStandings(state.carIds, state.rounds),
@@ -42,12 +40,11 @@ export function ChampionshipRunner({
   );
   const trackId = currentTrackId(state);
   const track = trackId ? getTrack(trackId) : undefined;
-  const heatCars = currentHeat(state)
-    .map((id) => getCar(id))
-    .filter((c) => c !== undefined);
-  const heats = heatCount(state);
+  const gridCars = useMemo(
+    () => gridOrder(state).map((id) => getCar(id)).filter((c) => c !== undefined),
+    [state],
+  );
   const done = isFinished(state);
-  const positions = currentHeatPositions(state);
 
   return (
     <div className="mt-6 flex flex-col gap-8">
@@ -58,27 +55,20 @@ export function ChampionshipRunner({
               Lauf {state.rounds.length + 1} von {state.trackIds.length}: {track.name}
             </h2>
             <span className="text-sm text-zinc-400">
-              Rennen {state.heatIndex + 1} von {heats} · {heatCars.length} Autos
-              {positions && (
-                <>
-                  {" · "}
-                  <span className="text-zinc-300">
-                    Plätze {positions.from}.–{positions.to}.
-                  </span>
-                </>
-              )}
+              {gridCars.length} Autos gemeinsam am Start
+              {state.rounds.length > 0 && " · aufgestellt nach dem Meisterschaftsstand"}
             </span>
           </div>
 
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {heatCars.map((car, i) => (
+            {gridCars.map((car, i) => (
               <span
                 key={car.id}
                 className="flex items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300"
               >
                 <span
                   className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: raceColor(i).hex }}
+                  style={{ backgroundColor: raceHex(i, gridCars.length) }}
                   aria-hidden
                 />
                 <span style={{ color: brandColor(car.make) }}>{car.make}</span>
@@ -87,28 +77,26 @@ export function ChampionshipRunner({
             ))}
           </div>
 
-          {/* Keyed so every heat starts a fresh runner rather than replaying
+          {/* Keyed so every round starts a fresh runner rather than replaying
               the previous one's state. */}
           <RaceRunner
-            key={`${state.rounds.length}-${state.heatIndex}`}
-            cars={heatCars}
+            key={state.rounds.length}
+            cars={gridCars}
             track={track}
-            onFinish={setFinishedHeat}
+            onFinish={setFinishedRound}
             outro={
               <button
                 type="button"
                 onClick={() => {
-                  if (!finishedHeat) return;
-                  setFinishedHeat(null);
-                  onHeatFinished(finishedHeat);
+                  if (!finishedRound) return;
+                  setFinishedRound(null);
+                  onRoundFinished(finishedRound);
                 }}
                 className="mt-4 rounded-full bg-emerald-500 px-5 py-2 font-semibold text-zinc-950 hover:bg-emerald-400"
               >
-                {state.heatIndex + 1 < heats
-                  ? `Nächstes Rennen (${state.heatIndex + 2} von ${heats})`
-                  : state.rounds.length + 1 < state.trackIds.length
-                    ? "Lauf abschließen und weiter"
-                    : "Meisterschaft abschließen"}
+                {state.rounds.length + 1 < state.trackIds.length
+                  ? "Lauf werten und weiter"
+                  : "Meisterschaft abschließen"}
               </button>
             }
           />
@@ -156,7 +144,7 @@ export function ChampionshipRunner({
             <tbody>
               {standings.map((standing, i) => {
                 const car = getCar(standing.carId);
-                const racing = currentHeat(state).includes(standing.carId);
+                const racing = !done;
                 return (
                   <tr
                     key={standing.carId}

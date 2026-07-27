@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { CarData, TrackData } from "@/lib/data";
 import { getCar } from "@/lib/data";
-import { formatGap, type RankedRacer } from "@/lib/race";
+import { formatGap, raceHex, type RankedRacer } from "@/lib/race";
 import { formatTimeMs } from "@/lib/format";
 import { timeStore, type TimeEntryData } from "@/lib/time-store";
 import { RankingRow } from "@/components/RankingRow";
@@ -19,11 +19,17 @@ interface LiveRankingProps {
   savedAt: number;
 }
 
+/** A grid slot's colour, from the size of the field it is in. */
+function hexFor(gridIndex: number, fieldSize: number): string | undefined {
+  return gridIndex >= 0 ? raceHex(gridIndex, fieldSize) : undefined;
+}
+
 /** The board under the simulation. It opens on every time ever set on this
  * track so a run lands in context immediately, with the duel one click away. */
 export function LiveRanking({ ranked, cars, track, savedAt }: LiveRankingProps) {
   const [view, setView] = useState<View>("overall");
   const carsById = new Map(cars.map((c) => [c.id, c]));
+  const fieldSize = cars.length;
 
   return (
     <section className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
@@ -39,9 +45,14 @@ export function LiveRanking({ ranked, cars, track, savedAt }: LiveRankingProps) 
       </header>
 
       {view === "race" ? (
-        <RaceView ranked={ranked} carsById={carsById} trackLengthM={track.lengthM} />
+        <RaceView
+          ranked={ranked}
+          carsById={carsById}
+          trackLengthM={track.lengthM}
+          fieldSize={fieldSize}
+        />
       ) : (
-        <OverallView ranked={ranked} track={track} savedAt={savedAt} />
+        <OverallView ranked={ranked} track={track} savedAt={savedAt} fieldSize={fieldSize} />
       )}
     </section>
   );
@@ -73,10 +84,12 @@ function RaceView({
   ranked,
   carsById,
   trackLengthM,
+  fieldSize,
 }: {
   ranked: RankedRacer[];
   carsById: Map<string, CarData>;
   trackLengthM: number;
+  fieldSize: number;
 }) {
   return (
     <ol className="flex flex-col gap-px bg-zinc-800">
@@ -88,6 +101,7 @@ function RaceView({
             car={carsById.get(racer.carId)}
             fallbackName={racer.carId}
             gridIndex={racer.gridIndex}
+            colorHex={hexFor(racer.gridIndex, fieldSize)}
             position={racer.position}
             // Each car's own clock: running while it drives, stopped at its lap
             // time the moment it crosses the line.
@@ -105,7 +119,17 @@ function RaceView({
   );
 }
 
-function OverallView({ ranked, track, savedAt }: { ranked: RankedRacer[]; track: TrackData; savedAt: number }) {
+function OverallView({
+  ranked,
+  track,
+  savedAt,
+  fieldSize,
+}: {
+  ranked: RankedRacer[];
+  track: TrackData;
+  savedAt: number;
+  fieldSize: number;
+}) {
   const [entries, setEntries] = useState<TimeEntryData[] | null>(null);
 
   useEffect(() => {
@@ -173,6 +197,7 @@ function OverallView({ ranked, track, savedAt }: { ranked: RankedRacer[]; track:
                   car={getCar(racer.carId)}
                   fallbackName={racer.carId}
                   gridIndex={racer.gridIndex}
+                  colorHex={hexFor(racer.gridIndex, fieldSize)}
                   // While driving, the place in this race; once home, the place
                   // it has taken on the overall board.
                   position={racer.finished ? (overall ?? racer.position) : racer.position}
@@ -198,6 +223,7 @@ function OverallView({ ranked, track, savedAt }: { ranked: RankedRacer[]; track:
             car={getCar(row.carId)}
             fallbackName={row.carId}
             gridIndex={row.gridIndex}
+            colorHex={hexFor(row.gridIndex, fieldSize)}
             position={row.position}
             time={row.timeMs === null ? "—" : formatTimeMs(row.timeMs)}
             note={

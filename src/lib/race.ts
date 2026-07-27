@@ -23,6 +23,21 @@ export function raceColor(index: number) {
   return RACE_COLORS[index % RACE_COLORS.length];
 }
 
+/** A colour for a grid slot in a field of any size.
+ *
+ * Up to ten cars these are the racing colours, which are picked to be told
+ * apart. A championship fields thirty, and wrapping the palette would put three
+ * cars in emerald; evenly spaced hues keep every dot on the map its own colour
+ * instead. Returned as a plain colour value rather than Tailwind classes,
+ * because a generated class name would not survive the stylesheet build. */
+export function raceHex(index: number, fieldSize: number): string {
+  if (fieldSize <= RACE_COLORS.length) return raceColor(index).hex;
+  // Stepping by a large co-prime-ish fraction of the wheel keeps neighbouring
+  // grid slots far apart in hue, so the front of the field is never a gradient.
+  const hue = (index * 137.5) % 360;
+  return `hsl(${hue.toFixed(0)} 70% 62%)`;
+}
+
 export interface RacerProgress {
   carId: string;
   /** Slot in the starting grid, which fixes the car's colour. Deliberately not

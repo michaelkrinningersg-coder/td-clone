@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { buildTrackPath, pointAtDistance, toSvgPath } from "@/lib/track-geometry";
 import { interpolateTraceAtTime, simulateRun, type SimResult } from "@/lib/physics";
-import { playbackDurationMs, raceColor, rankRacers, type RacerProgress } from "@/lib/race";
+import { playbackDurationMs, raceHex, rankRacers, type RacerProgress } from "@/lib/race";
 import { timeStore } from "@/lib/time-store";
 import { formatTimeMs } from "@/lib/format";
 import { LiveRanking } from "@/components/LiveRanking";
@@ -148,7 +148,7 @@ export function RaceRunner({
                 cx={pos.x}
                 cy={pos.y}
                 r={strokeWidth * 3}
-                fill={raceColor(racer.gridIndex).hex}
+                fill={raceHex(racer.gridIndex, cars.length)}
                 stroke="#09090b"
                 strokeWidth={strokeWidth * 0.6}
               />
@@ -180,7 +180,7 @@ export function RaceRunner({
                 )
                 .join(" ")}
               fill="none"
-              stroke={raceColor(i).hex}
+              stroke={raceHex(i, cars.length)}
               strokeWidth={1.5}
               opacity={0.9}
             />
@@ -195,7 +195,7 @@ export function RaceRunner({
                   x2={x}
                   y1={0}
                   y2={CHART_HEIGHT}
-                  stroke={raceColor(racer.gridIndex).hex}
+                  stroke={raceHex(racer.gridIndex, cars.length)}
                   strokeWidth={1}
                   opacity={0.35}
                 />

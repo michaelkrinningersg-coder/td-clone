@@ -4,7 +4,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { cars, getCar, getTrack, tracks, type CarData } from "@/lib/data";
 import { carClassOf, carClasses, classRangeLabel } from "@/lib/classes";
 import { brandColor } from "@/lib/brand-colors";
-import { CHAMPIONSHIP_SIZE, HEAT_SIZE } from "@/lib/championship";
+import { CHAMPIONSHIP_SIZE } from "@/lib/championship";
 import { fieldAround, randomGrid } from "@/lib/random-grid";
 import { carMatches } from "@/components/CarList";
 
@@ -62,9 +62,9 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
           1. Feld — {field.length} von {CHAMPIONSHIP_SIZE} Autos
         </h2>
         <p className="mt-1 text-sm text-zinc-400">
-          Ein Auto suchen und daraus ein Feld bauen, oder Auto für Auto hinzufügen. Gefahren wird in Rennen zu
-          je {HEAT_SIZE} Autos; gewertet wird danach über das ganze Feld — der Sieger eines Laufs bekommt so
-          viele Punkte, wie Autos im Feld stehen, der letzte einen.
+          Ein Auto suchen und daraus ein Feld bauen, oder Auto für Auto hinzufügen. Das ganze Feld startet
+          gemeinsam — der Sieger eines Laufs bekommt so viele Punkte, wie Autos im Feld stehen, der letzte
+          einen.
         </p>
 
         <input
@@ -170,8 +170,7 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
       <section>
         <h2 className="text-lg font-bold text-white">2. Kalender — {calendar.length} Läufe</h2>
         <p className="mt-1 text-sm text-zinc-400">
-          Reihenfolge mit den Pfeilen ändern. Ab dem zweiten Lauf bestimmt die Tabelle die Rennen: zuerst
-          fährt das Ende des Feldes gegeneinander, im letzten Rennen die Spitze.
+          Reihenfolge mit den Pfeilen ändern. Ab dem zweiten Lauf steht der Meisterschaftsführende auf Pole.
         </p>
 
         <ol className="mt-3 flex flex-col gap-px overflow-hidden rounded-xl bg-zinc-800">
@@ -237,9 +236,7 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
             ? "Mindestens zwei Autos ins Feld."
             : calendar.length === 0
               ? "Mindestens eine Strecke in den Kalender."
-              : `${field.length} Autos · ${calendar.length} Läufe · ${
-                  Math.ceil(field.length / HEAT_SIZE) * calendar.length
-                } Rennen`}
+              : `${field.length} Autos · ${calendar.length} ${calendar.length === 1 ? "Lauf" : "Läufe"}`}
         </p>
       </div>
     </div>

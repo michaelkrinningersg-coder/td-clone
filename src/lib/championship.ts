@@ -12,20 +12,15 @@ export function championshipPoints(position: number, fieldSize: number): number 
   return fieldSize + 1 - position;
 }
 
-/** How many run in one heat. A field of thirty on a single map is unreadable,
- * so a round is broken into heats and the track result is assembled from all of
- * them afterwards. Six is what the racing colours can tell apart. */
-export const HEAT_SIZE = 6;
-
-export interface HeatResult {
+export interface CarResult {
   carId: string;
   timeMs: number;
 }
 
 export interface RoundResult {
   trackId: string;
-  /** Every car's time on this track, in the order they were driven. */
-  results: HeatResult[];
+  /** Every car's time on this track. */
+  results: CarResult[];
 }
 
 export interface ChampionshipState {
@@ -33,20 +28,6 @@ export interface ChampionshipState {
   trackIds: string[];
   /** Rounds already completed, in calendar order. */
   rounds: RoundResult[];
-  /** Which heat of the current round comes next. */
-  heatIndex: number;
-  /** Times collected for the round in progress, heat by heat. */
-  pending: HeatResult[];
-}
-
-/** Splits a field into heats of at most `size`, in the order given.
- *
- * The order is the caller's: the setup screen hands over the grid as picked,
- * and later rounds hand over the standings, so the leaders meet each other. */
-export function splitIntoHeats<T>(field: readonly T[], size = HEAT_SIZE): T[][] {
-  const heats: T[][] = [];
-  for (let i = 0; i < field.length; i += size) heats.push(field.slice(i, i + size));
-  return heats;
 }
 
 export interface ChampionshipStanding {
@@ -118,60 +99,23 @@ export function currentTrackId(state: ChampionshipState): string | null {
   return state.trackIds[state.rounds.length] ?? null;
 }
 
-/** The order the field is broken into heats in.
+/** The order the field lines up in.
  *
- * Before the first round there is nothing to go on, so the grid order stands.
- * Afterwards the table decides, worst placed first: the opening heat is the
- * back of the championship and the last one is the top six fighting for it,
- * which is the way round that keeps the day building to something. */
-export function heatOrder(state: ChampionshipState): string[] {
+ * The whole field starts together, so this only decides the grid slots - and
+ * with them the racing colours. Before the first round the field is as picked;
+ * afterwards the championship leader is on pole. */
+export function gridOrder(state: ChampionshipState): string[] {
   if (state.rounds.length === 0) return state.carIds;
-  return championshipStandings(state.carIds, state.rounds)
-    .map((s) => s.carId)
-    .reverse();
+  return championshipStandings(state.carIds, state.rounds).map((s) => s.carId);
 }
 
-/** The cars of the heat coming up. */
-export function currentHeat(state: ChampionshipState): string[] {
-  return splitIntoHeats(heatOrder(state))[state.heatIndex] ?? [];
-}
-
-/** The championship positions the heat coming up is made of, e.g. "30.–25.".
- * Null before the first round, when the heats follow the grid instead. */
-export function currentHeatPositions(state: ChampionshipState): { from: number; to: number } | null {
-  if (state.rounds.length === 0) return null;
-  const order = heatOrder(state);
-  const heats = splitIntoHeats(order);
-  const heat = heats[state.heatIndex];
-  if (!heat) return null;
-  // heatOrder runs backwards, so the first car of a heat is the worst placed.
-  const firstIndex = heats.slice(0, state.heatIndex).reduce((n, h) => n + h.length, 0);
-  return { from: order.length - firstIndex, to: order.length - firstIndex - heat.length + 1 };
-}
-
-export function heatCount(state: ChampionshipState): number {
-  return splitIntoHeats(state.carIds).length;
-}
-
-/** Files a heat's times. When it was the round's last heat, the round is closed
- * and the championship moves on to the next track. */
-export function recordHeat(state: ChampionshipState, results: HeatResult[]): ChampionshipState {
+/** Files a round's times and moves the championship on to the next track. */
+export function recordRound(state: ChampionshipState, results: CarResult[]): ChampionshipState {
   const trackId = currentTrackId(state);
   if (trackId === null) return state;
-
-  const pending = [...state.pending, ...results];
-  const nextHeat = state.heatIndex + 1;
-  if (nextHeat < heatCount(state)) {
-    return { ...state, pending, heatIndex: nextHeat };
-  }
-  return {
-    ...state,
-    rounds: [...state.rounds, { trackId, results: pending }],
-    pending: [],
-    heatIndex: 0,
-  };
+  return { ...state, rounds: [...state.rounds, { trackId, results }] };
 }
 
 export function newChampionship(carIds: string[], trackIds: string[]): ChampionshipState {
-  return { carIds, trackIds, rounds: [], heatIndex: 0, pending: [] };
+  return { carIds, trackIds, rounds: [] };
 }

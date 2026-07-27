@@ -15,6 +15,7 @@ export function RankingRow({
   car,
   fallbackName,
   gridIndex,
+  colorHex,
   position,
   time,
   note,
@@ -29,6 +30,8 @@ export function RankingRow({
   fallbackName: string;
   /** Slot in the starting grid; -1 for a car that is not in this race. */
   gridIndex: number;
+  /** Overrides the grid colour, for fields bigger than the racing palette. */
+  colorHex?: string;
   /** Null while a car is still driving and has no place yet. */
   position: number | null;
   time: string;
@@ -47,6 +50,7 @@ export function RankingRow({
   onDelete?: () => void | Promise<void>;
 }) {
   const color = gridIndex >= 0 ? raceColor(gridIndex) : null;
+  const hex = gridIndex >= 0 ? (colorHex ?? color!.hex) : null;
   // Deleting a time cannot be undone, so the × only arms the row and a second,
   // differently-worded button does the deed.
   const [confirming, setConfirming] = useState(false);
@@ -65,12 +69,12 @@ export function RankingRow({
   return (
     <li
       className={`relative border-l-4 px-3 py-2.5 ${highlighted ? "bg-emerald-950/30" : "bg-zinc-900"}`}
-      style={{ borderLeftColor: color?.hex ?? "#3f3f46" }}
+      style={{ borderLeftColor: hex ?? "#3f3f46" }}
     >
       {progressPercent !== undefined && (
         <div
-          className={`absolute inset-y-0 left-0 ${color?.bg ?? "bg-zinc-700"} opacity-10 transition-[width] duration-100`}
-          style={{ width: `${progressPercent}%` }}
+          className="absolute inset-y-0 left-0 opacity-10 transition-[width] duration-100"
+          style={{ width: `${progressPercent}%`, backgroundColor: hex ?? "#52525b" }}
           aria-hidden
         />
       )}
@@ -83,7 +87,10 @@ export function RankingRow({
           {car?.make ?? "—"}
         </span>
 
-        <span className={`min-w-0 flex-1 truncate text-sm ${color ? color.text : "text-zinc-200"}`}>
+        <span
+          className={`min-w-0 flex-1 truncate text-sm ${hex ? "" : "text-zinc-200"}`}
+          style={hex ? { color: hex } : undefined}
+        >
           {car ? car.model : fallbackName}
           {car && <span className="text-zinc-600"> ’{String(car.year).slice(2)}</span>}
         </span>
@@ -100,8 +107,9 @@ export function RankingRow({
 
         <span
           className={`w-9 shrink-0 text-right font-mono text-lg font-bold ${
-            podiumClass ?? (position === 1 ? (color?.text ?? "text-white") : "text-zinc-500")
+            podiumClass ?? (position === 1 ? "" : "text-zinc-500")
           }`}
+          style={!podiumClass && position === 1 ? { color: hex ?? "#fff" } : undefined}
         >
           {position === null ? "–" : `${position}.`}
         </span>

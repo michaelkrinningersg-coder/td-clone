@@ -6,11 +6,11 @@ import { ChampionshipRunner } from "@/components/ChampionshipRunner";
 import { ChampionshipSetup } from "@/components/ChampionshipSetup";
 import { ResetButton } from "@/components/ResetButton";
 
-/** A series over a calendar of tracks, run in heats. The single race answers
+/** A series over a calendar of tracks. The single race answers
  * "which of these four is quickest here"; a championship asks which car holds
  * up across a season. */
 export default function ChampionshipPage() {
-  const { state, ready, start, finishHeat, abandon } = useChampionship();
+  const { state, ready, start, finishRound, abandon } = useChampionship();
 
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
@@ -35,7 +35,7 @@ export default function ChampionshipPage() {
       {!ready ? (
         <p className="mt-8 text-zinc-400">Lade...</p>
       ) : state ? (
-        <ChampionshipRunner state={state} onHeatFinished={finishHeat} />
+        <ChampionshipRunner state={state} onRoundFinished={finishRound} />
       ) : (
         <>
           <p className="mt-1 text-sm text-zinc-400">

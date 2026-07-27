@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
-import type { ChampionshipState, HeatResult } from "@/lib/championship";
-import { newChampionship, recordHeat } from "@/lib/championship";
+import type { CarResult, ChampionshipState } from "@/lib/championship";
+import { newChampionship, recordRound } from "@/lib/championship";
 
 /** The running championship, kept in localStorage so a series survives a reload
  * halfway through. Same shape as the session store: an external store read
@@ -51,9 +51,9 @@ function hydrate() {
       restored = {
         carIds: parsed.carIds,
         trackIds: parsed.trackIds,
+        // A championship stored while the field still ran in heats keeps its
+        // completed rounds; a half-finished round simply starts over.
         rounds: Array.isArray(parsed.rounds) ? parsed.rounds : [],
-        heatIndex: typeof parsed.heatIndex === "number" ? parsed.heatIndex : 0,
-        pending: Array.isArray(parsed.pending) ? parsed.pending : [],
       };
     }
   } catch {
@@ -80,11 +80,11 @@ export function useChampionship() {
     persist(newChampionship(carIds, trackIds));
   }, []);
 
-  const finishHeat = useCallback((results: HeatResult[]) => {
-    if (snapshot.state) persist(recordHeat(snapshot.state, results));
+  const finishRound = useCallback((results: CarResult[]) => {
+    if (snapshot.state) persist(recordRound(snapshot.state, results));
   }, []);
 
   const abandon = useCallback(() => persist(null), []);
 
-  return { state, ready, start, finishHeat, abandon };
+  return { state, ready, start, finishRound, abandon };
 }
