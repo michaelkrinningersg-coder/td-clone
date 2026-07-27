@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   bestPerMake,
-  carsOnEveryTrack,
+  carsCoveringTracks,
   buildMakeStandings,
   buildStandings,
   hasMixedTrackCounts,
   onlyMostTracks,
   pointsForPosition,
   sortStandings,
+  tracksPerCar,
 } from "./standings";
 import type { TimeEntryData } from "./time-store";
 
@@ -309,22 +310,30 @@ describe("bestPerMake", () => {
   });
 });
 
-describe("carsOnEveryTrack", () => {
-  it("finds the cars that have been everywhere", () => {
-    const complete = carsOnEveryTrack(
-      [entry("a", "t1", 100), entry("a", "t2", 100), entry("b", "t1", 100)],
-      2,
-    );
-    assert.deepEqual([...complete], ["a"]);
+describe("carsCoveringTracks", () => {
+  const perCar = tracksPerCar([
+    entry("a", "t1", 100),
+    entry("a", "t2", 100),
+    entry("b", "t1", 100),
+    entry("b", "t1", 90),
+  ]);
+
+  it("finds the cars that have done the whole calendar", () => {
+    assert.deepEqual([...carsCoveringTracks(perCar, ["t1", "t2"])], ["a"]);
   });
 
   it("counts tracks, not times", () => {
-    const complete = carsOnEveryTrack([entry("a", "t1", 100), entry("a", "t1", 90)], 2);
-    assert.equal(complete.size, 0);
+    // Two times on t1 is not two tracks.
+    assert.equal(carsCoveringTracks(perCar, ["t1", "t2"]).has("b"), false);
   });
 
-  it("is empty when nothing has been driven", () => {
-    assert.equal(carsOnEveryTrack([], 3).size, 0);
+  it("only asks about the tracks it is given", () => {
+    assert.deepEqual([...carsCoveringTracks(perCar, ["t1"])].sort(), ["a", "b"]);
+    assert.equal(carsCoveringTracks(perCar, ["t3"]).size, 0);
+  });
+
+  it("is empty without a calendar", () => {
+    assert.equal(carsCoveringTracks(perCar, []).size, 0);
   });
 });
 

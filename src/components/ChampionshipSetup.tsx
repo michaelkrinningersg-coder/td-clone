@@ -1,42 +1,81 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { cars, getCar, getTrack, tracks, type CarData } from "@/lib/data";
 import { carClassOf, carClasses, classRangeLabel } from "@/lib/classes";
 import { brandColor } from "@/lib/brand-colors";
 import { CHAMPIONSHIP_SIZE } from "@/lib/championship";
-import { fieldAround, randomGrid } from "@/lib/random-grid";
-import { carsOnEveryTrack } from "@/lib/standings";
+import { fieldAround, pickRandom, randomGrid } from "@/lib/random-grid";
+import { carsCoveringTracks, tracksPerCar } from "@/lib/standings";
 import { timeStore } from "@/lib/time-store";
 import { carMatches } from "@/components/CarList";
 
+/** How many tracks a drawn calendar has. Every track there is would be a
+ * season nobody finishes; ten is an evening. */
+const CALENDAR_SIZE = 10;
+
 /** Building a championship: thirty cars and a calendar.
+ *
+ * It arrives ready to start - ten tracks drawn out of the seventy, then thirty
+ * cars drawn against them - because the common case is wanting to race, not
+ * wanting to plan. Everything is still editable underneath.
  *
  * Two ways to the field, because picking thirty by hand is a chore but a field
  * drawn entirely at random is not a field anyone cares about: search a car out
  * and fill the other 29 from its class, or add them one by one. */
 export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], trackIds: string[]) => void }) {
   const [field, setField] = useState<string[]>([]);
-  const [calendar, setCalendar] = useState<string[]>(tracks.map((t) => t.id));
+  const [calendar, setCalendar] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
-  const [onlyUnfinished, setOnlyUnfinished] = useState(false);
-  // The cars that have already been round every track. Loaded once: a
-  // championship is set up in one sitting, and nothing here writes times.
-  const [completeIds, setCompleteIds] = useState<Set<string>>(new Set());
+  const [onlyUnfinished, setOnlyUnfinished] = useState(true);
+
+  // Which tracks each car has already been round. Loaded once: a championship
+  // is set up in one sitting, and nothing here writes times.
+  const [racedTracks, setRacedTracks] = useState<Map<string, Set<string>> | null>(null);
   useEffect(() => {
     let cancelled = false;
     Promise.all(tracks.map((track) => timeStore.getLeaderboard(track.id)))
       .then((perTrack) => {
-        if (!cancelled) setCompleteIds(carsOnEveryTrack(perTrack.flat(), tracks.length));
+        if (!cancelled) setRacedTracks(tracksPerCar(perTrack.flat()));
       })
       .catch(() => {
-        if (!cancelled) setCompleteIds(new Set());
+        if (!cancelled) setRacedTracks(new Map());
       });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  /** Cars that have already done every track in a calendar, and so have nothing
+   * left to prove on it. */
+  const coveredBy = (trackIds: readonly string[]) =>
+    racedTracks ? carsCoveringTracks(racedTracks, trackIds) : new Set<string>();
+  const completeIds = useMemo(
+    () => (racedTracks ? carsCoveringTracks(racedTracks, calendar) : new Set<string>()),
+    [racedTracks, calendar],
+  );
+
+  /** Draws the whole thing: a calendar first, then a field measured against it.
+   * That order matters - the field is drawn from the cars that have not already
+   * done these ten tracks, which cannot be known before the ten are. */
+  function drawEverything() {
+    const drawn = pickRandom(tracks, CALENDAR_SIZE, Math.random).map((t) => t.id);
+    setCalendar(drawn);
+    setField(
+      randomGrid(cars, { count: CHAMPIONSHIP_SIZE, excludeIds: coveredBy(drawn) }).map((c) => c.id),
+    );
+  }
+
+  // Once, when the boards are in: arriving on the page is the request.
+  const drawn = useRef(false);
+  useEffect(() => {
+    if (drawn.current || racedTracks === null) return;
+    drawn.current = true;
+    drawEverything();
+    // drawEverything closes over racedTracks, which is what the guard waits for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [racedTracks]);
 
   const results = useMemo(() => {
     const words = deferredQuery.toLowerCase().split(/\s+/).filter(Boolean);
@@ -171,13 +210,13 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
             onChange={(e) => setOnlyUnfinished(e.target.checked)}
             className="h-3.5 w-3.5 accent-emerald-500"
           />
-          Nur Autos, die noch nicht auf allen {tracks.length} Strecken eine Zeit haben
+          Nur Autos, die den Kalender noch nicht komplett gefahren sind
           <span className="text-zinc-600">
             {completeIds.size === 0
               ? "— derzeit betrifft das kein Auto"
-              : `— ${completeIds.size} ${completeIds.size === 1 ? "Auto ist" : "Autos sind"} überall gefahren und ${
-                  completeIds.size === 1 ? "bliebe" : "blieben"
-                } draußen`}
+              : `— ${completeIds.size} ${completeIds.size === 1 ? "Auto war" : "Autos waren"} schon auf allen ${
+                  calendar.length
+                } Strecken und ${completeIds.size === 1 ? "bliebe" : "blieben"} draußen`}
           </span>
         </label>
 
@@ -210,9 +249,20 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
       </section>
 
       <section>
-        <h2 className="text-lg font-bold text-white">2. Kalender — {calendar.length} Läufe</h2>
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h2 className="text-lg font-bold text-white">2. Kalender — {calendar.length} Läufe</h2>
+          <button
+            type="button"
+            onClick={drawEverything}
+            className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:border-emerald-600 hover:text-white"
+          >
+            Neu auslosen
+          </button>
+        </div>
         <p className="mt-1 text-sm text-zinc-400">
-          Reihenfolge mit den Pfeilen ändern. Ab dem zweiten Lauf steht der Meisterschaftsführende auf Pole.
+          {CALENDAR_SIZE} von {tracks.length} Strecken sind ausgelost, dazu ein Feld, in dem kein Auto steht,
+          das diese Strecken schon alle gefahren ist. Beides ist frei änderbar. Reihenfolge mit den Pfeilen;
+          ab dem zweiten Lauf steht der Meisterschaftsführende auf Pole.
         </p>
 
         <ol className="mt-3 flex flex-col gap-px overflow-hidden rounded-xl bg-zinc-800">

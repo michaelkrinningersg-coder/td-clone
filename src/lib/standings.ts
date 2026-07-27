@@ -163,20 +163,30 @@ export interface MakeStanding {
   bestCarId: string;
 }
 
-/** The cars that hold a time on every track there is.
- *
- * What the championship setup leaves out when it should field cars that still
- * have somewhere to prove themselves. */
-export function carsOnEveryTrack(entries: readonly TimeEntryData[], trackCount: number): Set<string> {
+/** Which tracks each car already holds a time on. */
+export function tracksPerCar(entries: readonly TimeEntryData[]): Map<string, Set<string>> {
   const seen = new Map<string, Set<string>>();
   for (const entry of entries) {
     const tracks = seen.get(entry.carId) ?? new Set<string>();
     tracks.add(entry.trackId);
     seen.set(entry.carId, tracks);
   }
+  return seen;
+}
+
+/** The cars that have already been round every one of these tracks.
+ *
+ * What the championship leaves out when it draws a field: a car that has done
+ * the whole calendar has nothing left to prove on it, and the season would only
+ * be repeating times it already holds. */
+export function carsCoveringTracks(
+  perCar: ReadonlyMap<string, Set<string>>,
+  trackIds: readonly string[],
+): Set<string> {
   const complete = new Set<string>();
-  for (const [carId, tracks] of seen) {
-    if (tracks.size >= trackCount) complete.add(carId);
+  if (trackIds.length === 0) return complete;
+  for (const [carId, tracks] of perCar) {
+    if (trackIds.every((id) => tracks.has(id))) complete.add(carId);
   }
   return complete;
 }
