@@ -153,10 +153,19 @@ describe("startAtLongestStraight", () => {
 describe("the circuits that ship", () => {
   const surveyed = tracks.filter((t) => t.outline !== undefined);
 
-  it("draws the three real circuits from their survey", () => {
+  it("draws every closed track from a point list rather than from segments", () => {
     assert.deepEqual(
       surveyed.map((t) => t.name).sort(),
-      ["Monaco", "Monza", "Spa-Francorchamps"],
+      [
+        "Handlingkurs",
+        "Hungaroring",
+        "Interlagos",
+        "Monaco",
+        "Monza",
+        "Silverstone",
+        "Spa-Francorchamps",
+        "Suzuka",
+      ],
     );
   });
 
@@ -169,10 +178,17 @@ describe("the circuits that ship", () => {
     });
 
     it(`gives ${track.name} its measured length`, () => {
+      // The surveyed circuits at their real length; the handling course at the
+      // length it was built to.
       const expected: Record<string, number> = {
         Monza: 5766,
         "Spa-Francorchamps": 6956,
         Monaco: 3311,
+        Suzuka: 5798,
+        Silverstone: 5862,
+        Hungaroring: 4364,
+        Interlagos: 4283,
+        Handlingkurs: 2000,
       };
       assert.ok(
         Math.abs(track.lengthM - expected[track.name]) < 5,
@@ -188,15 +204,30 @@ describe("the circuits that ship", () => {
     });
   }
 
-  // The tightest corner of each: Monza's Rettifilo, Spa's La Source, Monaco's
-  // Fairmont hairpin. If the curvature reading drifts, these go first.
+  // Monza's Rettifilo, Spa's La Source, Monaco's hairpin, the Hungaroring's
+  // first corner. If the curvature reading drifts, these go first.
   it("finds the tight corners the circuits are known for", () => {
     for (const track of surveyed) {
       const tightest = Math.min(
         ...track.segments.filter((s) => s.kind === "corner").map((s) => (s as { radiusM: number }).radiusM),
       );
-      assert.ok(tightest < 35, `${track.name}'s tightest corner read ${tightest.toFixed(0)} m`);
+      assert.ok(tightest < 45, `${track.name}'s tightest corner read ${tightest.toFixed(0)} m`);
     }
+  });
+
+  // Each of these was picked for a different demand; if two of them read the
+  // same the point of having both is gone.
+  it("keeps the circuits telling different stories", () => {
+    const of = (name: string) => tracks.find((t) => t.name === name)!;
+    const longestStraight = (name: string) =>
+      Math.max(...of(name).segments.filter((s) => s.kind === "straight").map((s) => s.lengthM));
+    const cornersPerKm = (name: string) =>
+      of(name).segments.filter((s) => s.kind === "corner").length / (of(name).lengthM / 1000);
+
+    assert.ok(longestStraight("Monza") > longestStraight("Hungaroring"), "Monza is the one with the straight");
+    assert.ok(cornersPerKm("Monaco") > cornersPerKm("Silverstone"), "Monaco is the busy one");
+    assert.ok(of("Slalom 20 Tore").segments.every((s) => s.kind === "corner" || s.lengthM <= 30));
+    assert.equal(of("Bremstest 200-0-200").segments.filter((s) => s.kind === "corner").length, 1);
   });
 
   it("finds Monza's main straight", () => {

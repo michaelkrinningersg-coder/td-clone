@@ -19,6 +19,10 @@ const CIRCUITS = [
   { id: "it-1922", name: "Monza" },
   { id: "be-1925", name: "Spa-Francorchamps" },
   { id: "mc-1929", name: "Monaco" },
+  { id: "jp-1962", name: "Suzuka" },
+  { id: "gb-1948", name: "Silverstone" },
+  { id: "hu-1986", name: "Hungaroring" },
+  { id: "br-1940", name: "Interlagos" },
 ] as const;
 
 /** Metres per degree at the equator; longitude shrinks with the cosine of the

@@ -5,7 +5,15 @@ import {
   type GradientBand,
   type Point,
 } from "@/lib/track-polyline";
-import { MONACO_OUTLINE, MONZA_OUTLINE, SPA_FRANCORCHAMPS_OUTLINE } from "@/data/track-outlines";
+import {
+  HUNGARORING_OUTLINE,
+  INTERLAGOS_OUTLINE,
+  MONACO_OUTLINE,
+  MONZA_OUTLINE,
+  SILVERSTONE_OUTLINE,
+  SPA_FRANCORCHAMPS_OUTLINE,
+  SUZUKA_OUTLINE,
+} from "@/data/track-outlines";
 
 function straight(lengthM: number, gradientPercent = 0): Segment {
   return { kind: "straight", lengthM, gradientPercent };
@@ -78,15 +86,78 @@ function circuit(name: string, outline: [number, number][], gradients?: Gradient
   };
 }
 
+/** Interlagos runs anticlockwise and drops into the Senna S before climbing all
+ * the way back up to the line - about 40 m of it over a short lap. */
+const INTERLAGOS_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.08, percent: -6 },
+  { from: 0.08, to: 0.45, percent: -1 },
+  { from: 0.45, to: 0.72, percent: 2 },
+  { from: 0.72, to: 1, percent: 5 },
+];
+
+/** A slalom: one gate after another, nothing else.
+ *
+ * Power is worth almost nothing here - the car never gets near a speed where it
+ * matters. What decides it is how much tyre is under how much car, which is
+ * exactly what nothing else in the game asks. */
+function slalom(gates: number, spacingM: number, radiusM: number): Segment[] {
+  const segs: Segment[] = [straight(30)];
+  for (let i = 0; i < gates; i++) {
+    segs.push(corner(spacingM, radiusM, i % 2 === 0 ? "right" : "left"));
+  }
+  segs.push(straight(30));
+  return segs;
+}
+
+/** Full throttle, one very tight hairpin, full throttle again. Top speed is
+ * irrelevant on 800 m; what the stopwatch measures is how hard a car can brake
+ * and how hard it can pull away again. */
+function brakeTest(runupM: number, hairpinRadiusM: number): Segment[] {
+  return [
+    straight(runupM),
+    corner(Math.PI * hairpinRadiusM, hairpinRadiusM, "right"),
+    straight(runupM),
+  ];
+}
+
+/** A closed handling course built from a lobed curve, so the radius is never
+ * the same twice: hairpins where the lobes pinch, long sweepers where they open
+ * out. Written as a formula rather than a list of corners because a closed
+ * curve is closed by construction - the one thing hand-drawn circuits could
+ * never manage - and the same curvature reading the real circuits go through
+ * then finds the corners. */
+function handlingCourse(lengthM: number, points = 400): [number, number][] {
+  const raw: [number, number][] = Array.from({ length: points }, (_, i) => {
+    const a = (i / points) * Math.PI * 2;
+    const r = 1 + 0.42 * Math.sin(3 * a) + 0.16 * Math.sin(5 * a + 1.1);
+    return [Math.cos(a) * r, Math.sin(a) * r];
+  });
+  let perimeter = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const [ax, ay] = raw[i];
+    const [bx, by] = raw[(i + 1) % raw.length];
+    perimeter += Math.hypot(bx - ax, by - ay);
+  }
+  const scale = lengthM / perimeter;
+  return raw.map(([x, y]) => [x * scale, y * scale]);
+}
+
 export const tracks: TrackDefinition[] = [
   { name: "Sprint 250m", type: "SPRINT", segments: [straight(250)] },
   { name: "Sprint 500m", type: "SPRINT", segments: [straight(500)] },
   { name: "Sprint 1000m", type: "SPRINT", segments: [straight(1000)] },
   { name: "Sprint 2000m", type: "SPRINT", segments: [straight(2000)] },
+  { name: "Slalom 20 Tore", type: "SPRINT", segments: slalom(20, 20, 12) },
+  { name: "Bremstest 200-0-200", type: "SPRINT", segments: brakeTest(800, 15) },
 
   circuit("Monza", MONZA_OUTLINE),
   circuit("Spa-Francorchamps", SPA_FRANCORCHAMPS_OUTLINE, SPA_GRADIENTS),
   circuit("Monaco", MONACO_OUTLINE, MONACO_GRADIENTS),
+  circuit("Suzuka", SUZUKA_OUTLINE),
+  circuit("Silverstone", SILVERSTONE_OUTLINE),
+  circuit("Hungaroring", HUNGARORING_OUTLINE),
+  circuit("Interlagos", INTERLAGOS_OUTLINE, INTERLAGOS_GRADIENTS),
+  circuit("Handlingkurs", handlingCourse(2000)),
 
   {
     name: "Pikes Peak Hillclimb",

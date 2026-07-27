@@ -113,6 +113,15 @@ Nur die **Steigungen** sind von Hand gesetzt: OpenStreetMap führt keine Höhen,
 Runde Spa ohne den Anstieg durch Eau Rouge wäre eine andere Strecke. Sie liegen als Bänder
 über dem Rundenanteil in `src/data/tracks.ts`.
 
+Acht vermessene Rundkurse: Monza, Spa, Monaco, Suzuka, Silverstone, Hungaroring und
+Interlagos, dazu ein konstruierter Handlingkurs.
+
+Was nicht vermessen ist, ist konstruiert und braucht keine Vermessung: der Handlingkurs
+entsteht aus einer gelappten Kurve (`r = 1 + 0,42·sin 3θ + 0,16·sin 5θ`), also aus einer
+Formel statt aus einer Kurvenliste — eine geschlossene Kurve ist von selbst geschlossen,
+und dieselbe Krümmungsmessung findet darin die Kurven. Slalom und Bremstest sind offene
+Segmentfolgen, weil sie Punkt zu Punkt gehen.
+
 Pikes Peak bleibt eine Segmentliste ohne Umriss: ein Bergrennen ist keine Runde und hat
 sich nicht zu schließen. Dazu kommen vier reine Sprintstrecken.
 
