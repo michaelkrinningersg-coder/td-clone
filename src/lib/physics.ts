@@ -302,8 +302,9 @@ function accelerationMps2(
   speedMps: number,
   launchLimitN: number,
   gradientPercent: number,
+  powerFactor = 1,
 ): number {
-  const driveN = Math.min(launchLimitN, driveForceN(car, gearbox, speedMps));
+  const driveN = Math.min(launchLimitN, driveForceN(car, gearbox, speedMps) * powerFactor);
   const dragN = dragForceN(car, speedMps);
   const rollN = ROLLING_RESISTANCE * car.weightKg * G;
   const gradeN = car.weightKg * G * Math.sin(Math.atan(gradientPercent / 100));
@@ -370,17 +371,45 @@ function gradientProfile(segments: Segment[], stepM: number): number[] {
   return grades;
 }
 
-export function simulateRun(car: CarPhysicsInput, segments: Segment[]): SimResult {
+/** What a run is not doing at full strength.
+ *
+ * The engine's calibration - the traction limit solved against the car's real
+ * 0-100 time - belongs to the car and is deliberately not re-solved when the
+ * power is turned down: solving again would raise the traction limit to hit the
+ * same 0-100 time and the power loss would cancel itself out. */
+export interface RunModifiers {
+  /** Share of the drive force the car has today, 1 being all of it. */
+  powerFactor?: number;
+  /** Share of the tyres' grip, 1 being fresh. Cornering speed goes with its
+   * square root, braking and traction with the factor itself. */
+  gripFactor?: number;
+  /** The solved traction limit, when the caller has it already. Solving is the
+   * expensive part of a run, and a lap simulated fifty times over does not need
+   * it fifty times. */
+  launchLimitN?: number;
+}
+
+export function simulateRun(
+  car: CarPhysicsInput,
+  segments: Segment[],
+  mods: RunModifiers = {},
+): SimResult {
+  const powerFactor = mods.powerFactor ?? 1;
+  const gripFactor = mods.gripFactor ?? 1;
   const totalLengthM = segments.reduce((sum, s) => sum + s.lengthM, 0);
   const stepM = Math.max(1, Math.min(5, totalLengthM / 4000));
-  const limits = speedLimitProfile(car, segments, stepM);
+  const limits = speedLimitProfile(car, segments, stepM).map((cap) =>
+    // Cornering speed follows the square root of the grip, because the limit is
+    // v^2 / r against the friction the tyres have.
+    Number.isFinite(cap) ? cap * Math.sqrt(gripFactor) : cap,
+  );
   const grades = gradientProfile(segments, stepM);
   const steps = limits.length;
 
   // Backward pass: a corner has to be arrived at slowly enough, so its limit
   // reaches back up the track as far as the brakes need. This is what gives a
   // car a braking point instead of shedding speed instantly at the corner.
-  const decel = brakingDecelMps2(car);
+  const decel = brakingDecelMps2(car) * gripFactor;
   for (let i = steps - 2; i >= 0; i--) {
     const reachable = Math.sqrt(limits[i + 1] * limits[i + 1] + 2 * decel * stepM);
     limits[i] = Math.min(limits[i], reachable);
@@ -389,7 +418,7 @@ export function simulateRun(car: CarPhysicsInput, segments: Segment[]): SimResul
   // Forward pass: accelerate as hard as the engine, drag and gradient allow,
   // never exceeding the limit profile.
   const gearbox = buildGearbox(car);
-  const launchLimitN = solveLaunchLimitN(car, gearbox);
+  const launchLimitN = (mods.launchLimitN ?? solveLaunchLimitN(car, gearbox)) * gripFactor;
   const shifts = gearbox.shiftSpeeds;
   const shiftCost = car.manualGearbox ? SHIFT_TIME_S.manual : SHIFT_TIME_S.automatic;
   let nextShift = 0;
@@ -409,7 +438,7 @@ export function simulateRun(car: CarPhysicsInput, segments: Segment[]): SimResul
     const limit = limits[i];
     if (v > limit) v = limit; // braking already accounted for by the backward pass
 
-    const a = accelerationMps2(car, gearbox, v, launchLimitN, grades[i]);
+    const a = accelerationMps2(car, gearbox, v, launchLimitN, grades[i], powerFactor);
     const vNext = Math.max(1, Math.min(limit, Math.sqrt(Math.max(0, v * v + 2 * a * stepM))));
     const vAvg = (v + vNext) / 2;
     t += stepM / vAvg;

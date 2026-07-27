@@ -162,6 +162,40 @@ liegt, nie zu einer Zeit.
 Die Kurvenrichtung geht **nicht** in die Zeit ein — sie entscheidet nur, wohin sich die
 Linie dreht.
 
+## Rennen
+
+Neben der einzelnen Runde gibt es den Modus **Rennen**: 250 km auf einem Rundkurs, auf ganze
+Runden gerundet — 36 Runden Spa, 76 Runden Monaco, 199 Runden Kreisbahn. Bis zu 28 Autos,
+wahlweise höchstens zwei je Marke, gezogen aus dem, was die Autofilter übrig lassen. Nur
+geschlossene Runden stehen zur Wahl: ein Bergrennen und ein stehender Kilometer haben keine.
+
+Dieser Modus ist der einzige mit Zufall, und er ist bewusst vom Rundenzeitmodell getrennt:
+
+**Reifen.** Ein Satz hält **60–85 % des Rennens** — wie viel genau, entscheidet das Auto
+(Gewicht je Millimeter Reifenbreite) und zu 30 % die Strecke (Kurvenanteil). Der Satz ist neu
+1,5 % unter seinem Optimum, hat es nach **15 % seiner Lebensdauer** erreicht und baut danach
+**quadratisch** ab: die erste Stinthälfte kostet fast nichts, die letzten Runden das meiste.
+Am Ende der Lebensdauer fehlen 18 % Grip.
+
+**Boxenstopps.** Kein Satz überlebt das Rennen, also stoppt jedes Auto — **immer ein- oder
+zweimal, nie öfter**. Welche der beiden Strategien, rechnet die Box je Auto selbst aus: sie
+vergleicht die Rundenverluste durch abbauende Reifen mit den 25 Sekunden Boxenzeit und nimmt
+die billigere. Der Stopp fällt dann **±4 Runden** um den errechneten Zeitpunkt, damit nicht
+das ganze Feld in derselben Runde hereinkommt. Ein Test rechnet beide Strategien für 20 echte
+Autos nach und prüft, dass die gewählte tatsächlich die schnellere war.
+
+**Zufall.** Je Runde 0–2 % weniger Leistung, dazu eine Tagesform von 0–2 % für das ganze
+Rennen. Fahrfehler kosten für eine Runde 10 % Grip; sie sind auf kurvenreichen Strecken und
+mit schwächeren Bremsen wahrscheinlicher.
+
+Wie viel ein Auto durch Grip- oder Leistungsverlust verliert, ist nicht geraten: für jedes
+Auto laufen drei Runden — sauber, 10 % weniger Grip, 10 % weniger Leistung — und dazwischen
+wird linear gelesen. Ein Bugatti verliert fast nichts durch fehlende Leistung und viel durch
+fehlenden Grip, ein Dacia genau umgekehrt.
+
+Rennergebnisse gehen **nicht** in die Ranglisten. Die versprechen eine saubere, wiederholbare
+Runde; ein Rennen hat Glück darin.
+
 ## Tests
 
 ```bash

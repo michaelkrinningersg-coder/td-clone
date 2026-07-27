@@ -22,6 +22,7 @@ const NAV = [
   { href: "/", label: "Strecken" },
   { href: "/cars", label: "Autos" },
   { href: "/garage", label: "Garage" },
+  { href: "/rennen", label: "Rennen" },
   { href: "/championship", label: "Meisterschaft" },
   { href: "/duel", label: "Duell" },
   { href: "/standings", label: "Wertung" },
