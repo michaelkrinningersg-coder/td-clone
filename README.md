@@ -111,10 +111,13 @@ sich, weil die Vermessung es tut.
 
 Nur die **Steigungen** sind von Hand gesetzt: OpenStreetMap führt keine Höhen, und eine
 Runde Spa ohne den Anstieg durch Eau Rouge wäre eine andere Strecke. Sie liegen als Bänder
-über dem Rundenanteil in `src/data/tracks.ts`.
+über dem Rundenanteil in `src/data/tracks.ts` — für Spa, Monaco, Interlagos, den Red Bull
+Ring, Austin, Imola, Mugello und Zandvoort. Die flachen Stadtkurse (Montreal, Baku,
+Singapur, Jeddah, Mexiko-Stadt) fahren ohne, weil sie es real auch tun.
 
-Sieben vermessene Rundkurse: Monza, Spa, Monaco, Suzuka, Silverstone, Hungaroring und
-Interlagos. Dazu vier konstruierte, die jeweils eine andere Frage stellen: Handlingkurs,
+Siebzehn vermessene Rundkurse: Monza, Spa, Monaco, Suzuka, Silverstone, Hungaroring,
+Interlagos, Montreal, Red Bull Ring, Zandvoort, Baku, Austin, Imola, Singapur, Mugello,
+Jeddah und Mexiko-Stadt. Dazu vier konstruierte, die jeweils eine andere Frage stellen: Handlingkurs,
 Stadtkurs (rund sechzehn Kurven je Kilometer), Kreisbahn mit 200 m Radius (nur Grip, keine
 Leistung) und ein Trioval über 4,5 km (nur Leistung gegen Luftwiderstand).
 

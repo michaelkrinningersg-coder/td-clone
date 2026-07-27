@@ -6,13 +6,23 @@ import {
   type Point,
 } from "@/lib/track-polyline";
 import {
+  AUSTIN_OUTLINE,
+  BAKU_OUTLINE,
   HUNGARORING_OUTLINE,
+  IMOLA_OUTLINE,
   INTERLAGOS_OUTLINE,
+  JEDDAH_OUTLINE,
+  MEXIKO_OUTLINE,
   MONACO_OUTLINE,
+  MONTREAL_OUTLINE,
   MONZA_OUTLINE,
+  MUGELLO_OUTLINE,
+  RED_BULL_RING_OUTLINE,
   SILVERSTONE_OUTLINE,
+  SINGAPUR_OUTLINE,
   SPA_FRANCORCHAMPS_OUTLINE,
   SUZUKA_OUTLINE,
+  ZANDVOORT_OUTLINE,
 } from "@/data/track-outlines";
 
 function straight(lengthM: number, gradientPercent = 0): Segment {
@@ -71,6 +81,55 @@ const MONACO_GRADIENTS: GradientBand[] = [
   { from: 0.22, to: 0.28, percent: 2 },
   { from: 0.28, to: 0.42, percent: -6 },
   { from: 0.42, to: 1, percent: 0 },
+];
+
+/** The Red Bull Ring is a hill: up from turn one to the Remus hairpin, along
+ * the top, then all the way back down to the line. About 65 m of it. */
+const RED_BULL_RING_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.1, percent: 2 },
+  { from: 0.1, to: 0.3, percent: 9 },
+  { from: 0.3, to: 0.5, percent: 3 },
+  { from: 0.5, to: 0.75, percent: -5 },
+  { from: 0.75, to: 1, percent: -4 },
+];
+
+/** Austin climbs about 40 m straight up to the blind turn one and gives it all
+ * back through the esses and the run to the back straight. */
+const AUSTIN_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.08, percent: 11 },
+  { from: 0.08, to: 0.2, percent: -6 },
+  { from: 0.2, to: 0.45, percent: -1 },
+  { from: 0.45, to: 0.7, percent: 2 },
+  { from: 0.7, to: 1, percent: -1 },
+];
+
+/** Imola runs uphill from Tosa to Piratella, drops through Acque Minerali and
+ * climbs back to the line - some 40 m either way. */
+const IMOLA_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.25, percent: -2 },
+  { from: 0.25, to: 0.45, percent: 6 },
+  { from: 0.45, to: 0.6, percent: -5 },
+  { from: 0.6, to: 0.8, percent: 4 },
+  { from: 0.8, to: 1, percent: -2 },
+];
+
+/** Mugello sits in the Tuscan hills: down from the line to San Donato, along
+ * the valley, then the long climb back up through the Arrabbiatas. */
+const MUGELLO_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.12, percent: -4 },
+  { from: 0.12, to: 0.4, percent: 2 },
+  { from: 0.4, to: 0.7, percent: 5 },
+  { from: 0.7, to: 0.85, percent: -3 },
+  { from: 0.85, to: 1, percent: -2 },
+];
+
+/** Zandvoort runs through dunes; the banked Hugenholtz and Arie Luyendyk are
+ * the high points. Banking is not modelled, only the climb. */
+const ZANDVOORT_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.15, percent: 3 },
+  { from: 0.15, to: 0.4, percent: -2 },
+  { from: 0.4, to: 0.75, percent: 2 },
+  { from: 0.75, to: 1, percent: -2 },
 ];
 
 function circuit(name: string, outline: [number, number][], gradients?: GradientBand[]): TrackDefinition {
@@ -263,6 +322,16 @@ export const tracks: TrackDefinition[] = [
   circuit("Silverstone", SILVERSTONE_OUTLINE),
   circuit("Hungaroring", HUNGARORING_OUTLINE),
   circuit("Interlagos", INTERLAGOS_OUTLINE, INTERLAGOS_GRADIENTS),
+  circuit("Montreal", MONTREAL_OUTLINE),
+  circuit("Red Bull Ring", RED_BULL_RING_OUTLINE, RED_BULL_RING_GRADIENTS),
+  circuit("Zandvoort", ZANDVOORT_OUTLINE, ZANDVOORT_GRADIENTS),
+  circuit("Baku", BAKU_OUTLINE),
+  circuit("Austin", AUSTIN_OUTLINE, AUSTIN_GRADIENTS),
+  circuit("Imola", IMOLA_OUTLINE, IMOLA_GRADIENTS),
+  circuit("Singapur", SINGAPUR_OUTLINE),
+  circuit("Mugello", MUGELLO_OUTLINE, MUGELLO_GRADIENTS),
+  circuit("Jeddah", JEDDAH_OUTLINE),
+  circuit("Mexiko-Stadt", MEXIKO_OUTLINE),
   circuit("Handlingkurs", handlingCourse(2000)),
   circuit("Kreisbahn 200 m", circleOutline(200)),
   circuit("Stadtkurs eng", cityLoop(2500)),

@@ -157,17 +157,27 @@ describe("the circuits that ship", () => {
     assert.deepEqual(
       surveyed.map((t) => t.name).sort(),
       [
+        "Austin",
+        "Baku",
         "Handlingkurs",
         "Hungaroring",
+        "Imola",
         "Interlagos",
+        "Jeddah",
         "Kreisbahn 200 m",
+        "Mexiko-Stadt",
         "Monaco",
+        "Montreal",
         "Monza",
+        "Mugello",
+        "Red Bull Ring",
         "Silverstone",
+        "Singapur",
         "Spa-Francorchamps",
         "Stadtkurs eng",
         "Suzuka",
         "Trioval 4500 m",
+        "Zandvoort",
       ],
     );
   });
@@ -184,6 +194,16 @@ describe("the circuits that ship", () => {
       // The surveyed circuits at their real length; the handling course at the
       // length it was built to.
       const expected: Record<string, number> = {
+        Montreal: 4345,
+        "Red Bull Ring": 4298,
+        Zandvoort: 4247,
+        Baku: 5932,
+        Austin: 5507,
+        Imola: 4891,
+        Singapur: 4926,
+        Mugello: 5225,
+        Jeddah: 6169,
+        "Mexiko-Stadt": 4291,
         "Kreisbahn 200 m": 1257,
         "Stadtkurs eng": 2500,
         "Trioval 4500 m": 4500,
@@ -214,7 +234,11 @@ describe("the circuits that ship", () => {
   // first corner. If the curvature reading drifts, these go first. The
   // constructed shapes are exempt: a 200 m ring has no tight corner by
   // definition, and neither does a trioval.
-  const SWEEPING = new Set(["Kreisbahn 200 m", "Trioval 4500 m"]);
+  // Mugello is in there for the same reason as the constructed shapes rather
+  // than a different one: it has no hairpin, its tightest corner is a 57 m
+  // second-gear right, and asking it for one would be asking for a corner the
+  // circuit does not have.
+  const SWEEPING = new Set(["Kreisbahn 200 m", "Trioval 4500 m", "Mugello"]);
 
   it("finds the tight corners the circuits are known for", () => {
     for (const track of surveyed.filter((t) => !SWEEPING.has(t.name))) {

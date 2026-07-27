@@ -23,6 +23,16 @@ const CIRCUITS = [
   { id: "gb-1948", name: "Silverstone" },
   { id: "hu-1986", name: "Hungaroring" },
   { id: "br-1940", name: "Interlagos" },
+  { id: "ca-1978", name: "Montreal" },
+  { id: "at-1969", name: "Red Bull Ring" },
+  { id: "nl-1948", name: "Zandvoort" },
+  { id: "az-2016", name: "Baku" },
+  { id: "us-2012", name: "Austin" },
+  { id: "it-1953", name: "Imola" },
+  { id: "sg-2008", name: "Singapur" },
+  { id: "it-1914", name: "Mugello" },
+  { id: "sa-2021", name: "Jeddah" },
+  { id: "mx-1962", name: "Mexiko" },
 ] as const;
 
 /** Metres per degree at the equator; longitude shrinks with the cosine of the
