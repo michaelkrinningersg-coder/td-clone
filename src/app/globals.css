@@ -1,23 +1,46 @@
 @import "tailwindcss";
 
-/* The app is a deliberately dark, racing-style UI, so there is no light theme
- * to switch to. These values must match the dark palette the components use;
- * this unlayered `body` rule outranks Tailwind's utility layer, so a light
- * value here would silently win over `bg-zinc-950` on <body>. */
+/* Deliberately dark, warm "garage" palette — there is no light theme to switch
+ * to. These values must match what the components use; this unlayered `body`
+ * rule outranks Tailwind's utility layer. */
 :root {
-  --background: #09090b; /* zinc-950 */
-  --foreground: #fafafa; /* zinc-50 */
+  --background: #100e0c; /* warm off-black */
+  --foreground: #f5efe6; /* warm paper */
+  --panel: #1a1512;      /* card surface */
+  --panel-deep: #15110e; /* inset surface, footer */
+  --line: #2e2721;       /* card border */
+  --line-soft: #26211c;  /* chrome divider */
+  --muted: #7d7266;      /* secondary text */
+  --dim: #6d6459;        /* labels, small caps */
+  --accent: #e2492f;     /* the one action colour */
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-panel: var(--panel);
+  --color-panel-deep: var(--panel-deep);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-muted: var(--muted);
+  --color-dim: var(--dim);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-barlow);
+  --font-cond: var(--font-barlow-condensed);
+  --font-display: var(--font-anton);
+  --font-mono: var(--font-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-barlow), system-ui, sans-serif;
+}
+
+/* Small caps labels appear on nearly every surface. */
+.label {
+  font-family: var(--font-barlow-condensed), system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }

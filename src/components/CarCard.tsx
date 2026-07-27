@@ -1,60 +1,43 @@
 "use client";
 
 import Link from "next/link";
-import type { CarData, StatRange, StatRanges } from "@/lib/data";
-import { raceColor } from "@/lib/race";
+import type { CarData } from "@/lib/data";
+import { raceHex } from "@/lib/race";
 import { brandColor } from "@/lib/brand-colors";
 import { useSession } from "@/lib/selection";
 import { carClassOf, classRangeLabel, powerToWeight } from "@/lib/classes";
 
-interface StatBarProps {
-  label: string;
-  value: number;
-  range: StatRange;
-  unit: string;
-  /** True for stats where a lower number is the better one (0-100 time, weight). */
-  lowerIsBetter?: boolean;
-}
+/** A trading card, because the app is a game. One card carries one headline
+ * number - kg/PS, the figure that actually predicts the lap - and everything
+ * else is small print underneath. The class is a colour field down the spine
+ * rather than a pill competing with the marque, and a selected card wears its
+ * grid number as a cut corner.
+ *
+ * The star and the info link are buttons of their own, so they cannot sit inside
+ * the card button - nested buttons are invalid markup and the inner click would
+ * never fire. They are laid over the card instead. */
 
-/** A full bar always means "strong for this stat", whichever direction the
- * underlying number runs - otherwise a 2.9s sprint would render as an almost
- * empty bar and read as bad. Scaled between the field's weakest and strongest
- * car so ordinary cars still show a meaningful difference. */
-function StatBar({ label, value, range, unit, lowerIsBetter }: StatBarProps) {
-  const span = range.max - range.min;
-  const position = span > 0 ? (value - range.min) / span : 0.5;
-  const strength = lowerIsBetter ? 1 - position : position;
-  const widthPercent = Math.max(3, Math.min(100, strength * 100));
+const SPEC_LABELS = ["PS", "NM", "0–100", "VMAX"] as const;
 
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-20 shrink-0 text-zinc-400">{label}</span>
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
-        <div
-          className={`h-full rounded-full ${lowerIsBetter ? "bg-amber-500" : "bg-emerald-500"}`}
-          style={{ width: `${widthPercent}%` }}
-        />
-      </div>
-      <span className="w-16 shrink-0 text-right text-zinc-300">
-        {value}
-        {unit}
-      </span>
-    </div>
-  );
-}
-
-export function CarCard({ car, statRanges }: { car: CarData; statRanges: StatRanges }) {
+export function CarCard({ car }: { car: CarData }) {
   const { selectedIds, isSelected, toggleCar, isFull, isInGarage, toggleGarage } = useSession();
   const selected = isSelected(car.id);
   const gridPosition = selectedIds.indexOf(car.id);
-  const color = selected ? raceColor(gridPosition) : null;
+  const gridHex = selected ? raceHex(gridPosition, selectedIds.length) : null;
   const blocked = isFull && !selected;
-  const carClass = carClassOf(car);
+  const cls = carClassOf(car);
   const starred = isInGarage(car.id);
+  const kgPerPs = (Math.round(powerToWeight(car) * 10) / 10).toLocaleString("de-DE", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  const specs = [
+    car.powerPs.toLocaleString("de-DE"),
+    car.torqueNm.toLocaleString("de-DE"),
+    car.accel0to100s.toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+    car.topSpeedKph.toLocaleString("de-DE"),
+  ];
 
-  // The star is a button of its own, so it cannot sit inside the card button -
-  // nested buttons are invalid markup and the inner click would never fire. It
-  // is laid over the card instead, together with the grid number.
   return (
     <div className="relative">
       <button
@@ -62,84 +45,107 @@ export function CarCard({ car, statRanges }: { car: CarData; statRanges: StatRan
         onClick={() => toggleCar(car.id)}
         disabled={blocked}
         aria-pressed={selected}
-        className={`flex w-full flex-col gap-3 rounded-xl border bg-zinc-900 p-4 text-left transition-colors ${
+        // The notch is what makes it a card rather than a box; it stays even
+        // when nothing is selected, so the corner tag drops into a shape that
+        // was already there.
+        style={{
+          clipPath: "polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%)",
+          borderColor: gridHex ?? undefined,
+        }}
+        className={`flex w-full bg-[#1a1512] text-left transition-colors ${
           selected
-            ? `${color!.border} ring-1 ${color!.ring}`
+            ? "border"
             : blocked
-              ? "cursor-not-allowed border-zinc-800 opacity-40"
-              : "border-zinc-800 hover:border-emerald-600"
+              ? "cursor-not-allowed border border-[#2e2721] opacity-40"
+              : "border border-[#2e2721] hover:border-[#e2492f]"
         }`}
       >
-        <div className="min-w-0 pr-14">
-          <div className="text-xs uppercase tracking-wide text-zinc-500">
-            <span className="font-medium" style={{ color: brandColor(car.make) }}>
-              {car.make}
-            </span>{" "}
-            · {car.year}
-          </div>
-          <div className="text-lg font-semibold text-white">{car.model}</div>
-          <div className="truncate text-xs text-zinc-400" title={car.variant}>
-            {car.variant}
-          </div>
-          <div className="mt-1 flex flex-wrap gap-2 text-xs text-zinc-500">
-            <span
-              className={`rounded bg-zinc-800 px-1.5 py-0.5 font-medium ${carClass.color}`}
-              title={classRangeLabel(carClass)}
-            >
-              {carClass.name}
-            </span>
-            <span className="rounded bg-zinc-800 px-1.5 py-0.5">{car.drivetrain}</span>
-            <span className="rounded bg-zinc-800 px-1.5 py-0.5">{car.fuelType}</span>
-          </div>
+        {/* Class spine. */}
+        <div
+          className="flex w-[34px] shrink-0 items-end justify-center border-r py-2.5"
+          style={{ backgroundColor: `${cls.hex}22`, borderColor: `${cls.hex}44` }}
+          title={classRangeLabel(cls)}
+        >
+          <span
+            className="label text-[11px] tracking-[0.22em]"
+            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", color: cls.hex }}
+          >
+            {cls.name}
+          </span>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <StatBar label="Top-Speed" value={car.topSpeedKph} range={statRanges.topSpeedKph} unit=" km/h" />
-          <StatBar
-            label="0-100"
-            value={car.accel0to100s}
-            range={statRanges.accel0to100s}
-            unit="s"
-            lowerIsBetter
-          />
-          <StatBar label="Leistung" value={car.powerPs} range={statRanges.powerPs} unit=" PS" />
-          <StatBar label="Drehmoment" value={car.torqueNm} range={statRanges.torqueNm} unit=" Nm" />
-          <StatBar label="Gewicht" value={car.weightKg} range={statRanges.weightKg} unit=" kg" lowerIsBetter />
-          <StatBar
-            label="kg/PS"
-            value={Math.round(powerToWeight(car) * 10) / 10}
-            range={statRanges.powerToWeight}
-            unit=""
-            lowerIsBetter
-          />
+        <div className="min-w-0 flex-1 px-3.5 pb-3 pt-3.5">
+          <div className="flex items-start gap-2.5">
+            <div className="min-w-0 flex-1">
+              <div className="label text-[11px] tracking-[0.16em]" style={{ color: brandColor(car.make) }}>
+                {car.make}
+              </div>
+              <div className="mt-px truncate font-[family-name:var(--font-anton)] text-[24px] uppercase leading-[0.95] tracking-[0.01em] text-[#f5efe6]">
+                {car.model}
+              </div>
+              <div className="mt-[3px] truncate text-[11px] text-[#7d7266]" title={car.variant}>
+                {car.year} · {car.variant}
+              </div>
+            </div>
+            {/* Sits below the cut corner so the grid tag never covers the figure. */}
+            <div className="mt-[26px] shrink-0 text-right">
+              <div className="font-[family-name:var(--font-anton)] text-[30px] leading-none text-[#f5efe6]">
+                {kgPerPs}
+              </div>
+              <div className="label text-[9px] tracking-[0.14em] text-[#7d7266]">kg / PS</div>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-4 gap-px bg-[#2e2721]">
+            {SPEC_LABELS.map((label, i) => (
+              <span key={label} className="bg-[#15110e] px-2 py-[7px]">
+                <span className="label block text-[8.5px] tracking-[0.14em] text-[#6d6459]">{label}</span>
+                <span className="mt-px block font-[family-name:var(--font-mono)] text-[13px] font-medium text-[#e8e0d4]">
+                  {specs[i]}
+                </span>
+              </span>
+            ))}
+          </div>
+
+          <div className="mt-2.5 flex items-center justify-between gap-2.5">
+            <span className="whitespace-nowrap font-[family-name:var(--font-mono)] text-[11px] text-[#7d7266]">
+              {car.drivetrain} · {car.fuelType}
+            </span>
+            <span className="whitespace-nowrap font-[family-name:var(--font-mono)] text-[11px] text-[#6d6459]">
+              {car.weightKg.toLocaleString("de-DE")} kg
+            </span>
+          </div>
         </div>
       </button>
 
-      <div className="absolute right-3 top-3 flex items-center gap-1.5">
+      {/* Grid number as a cut corner, dropped into the notch. */}
+      {selected && gridHex && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute right-0 top-0 flex h-8 w-[60px] items-center justify-end pr-2.5 font-[family-name:var(--font-anton)] text-[17px] text-[#100e0c]"
+          style={{ backgroundColor: gridHex, clipPath: "polygon(18px 0, 100% 0, 100% 100%, 0 100%)" }}
+        >
+          {gridPosition + 1}
+        </span>
+      )}
+
+      <div className="absolute bottom-2 right-3 flex items-center gap-2">
         <Link
           href={`/car?id=${encodeURIComponent(car.id)}`}
           aria-label={`Alle Daten zum ${car.make} ${car.model}`}
           title="Alle Daten und simulierte Zeiten"
-          className="rounded-full px-1.5 text-sm leading-none text-zinc-700 transition-colors hover:text-emerald-400"
+          className="font-[family-name:var(--font-mono)] text-[12px] leading-none text-[#4a4239] transition-colors hover:text-[#e2492f]"
         >
-          ⓘ
+          Daten →
         </Link>
-        {selected && (
-          <span
-            className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${color!.bg} text-zinc-950`}
-            aria-hidden
-          >
-            {gridPosition + 1}
-          </span>
-        )}
         <button
           type="button"
           onClick={() => toggleGarage(car.id)}
           aria-pressed={starred}
           aria-label={starred ? `${car.model} aus der Garage nehmen` : `${car.model} in die Garage legen`}
           title={starred ? "Aus der Garage nehmen" : "In die Garage legen"}
-          className={`text-lg leading-none transition-colors ${
-            starred ? "text-amber-300 hover:text-amber-200" : "text-zinc-700 hover:text-zinc-400"
+          className={`text-[15px] leading-none transition-colors ${
+            starred ? "text-[#f0b429] hover:text-[#f6c95c]" : "text-[#4a4239] hover:text-[#7d7266]"
           }`}
         >
           {starred ? "★" : "☆"}

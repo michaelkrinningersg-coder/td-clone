@@ -3,12 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getCars, getTrack } from "@/lib/data";
-import { MAX_RACERS, raceColor } from "@/lib/race";
+import { MAX_RACERS, raceHex } from "@/lib/race";
+import { powerToWeight } from "@/lib/classes";
 import { useSession } from "@/lib/selection";
 
 /** Sticky footer showing the grid being assembled. It follows the user across
  * brands so the selection is never out of sight, and is the way onward once at
- * least one car is picked. */
+ * least one car is picked.
+ *
+ * Each chip is flex:none: a shrinkable chip would break a car's name over two
+ * lines while the bar still has free space, and the bar carrying the primary
+ * action must never look broken. */
 export function SelectionBar() {
   const { trackId, selectedIds, removeCar, clearCars, ready } = useSession();
   const pathname = usePathname();
@@ -21,52 +26,55 @@ export function SelectionBar() {
   const track = getTrack(trackId ?? "");
 
   return (
-    <div className="sticky bottom-0 z-10 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-3 px-6 py-3">
-        <span className="text-xs uppercase tracking-wide text-zinc-500">
-          Startfeld {selected.length}/{MAX_RACERS}
+    <div className="sticky bottom-0 z-10 border-t border-[#26211c] bg-[#15110e]/95 backdrop-blur">
+      <div className="flex flex-wrap items-center gap-4 px-6 py-3">
+        <span className="label text-[11px] tracking-[0.18em] text-[#8b8177]">
+          Feld {selected.length}/{MAX_RACERS}
         </span>
 
         <ul className="flex flex-1 flex-wrap gap-2">
-          {selected.map((car, i) => (
-            <li
-              key={car.id}
-              className={`flex items-center gap-2 rounded-full border ${raceColor(i).border} bg-zinc-900 py-1 pl-2 pr-1 text-sm`}
-            >
-              <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${raceColor(i).bg}`} aria-hidden />
-              <span className="text-white">
-                {car.make} {car.model}
-              </span>
-              <button
-                onClick={() => removeCar(car.id)}
-                aria-label={`${car.make} ${car.model} entfernen`}
-                className="rounded-full px-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-white"
+          {selected.map((car, i) => {
+            const hex = raceHex(i, selected.length);
+            return (
+              <li
+                key={car.id}
+                className="flex flex-none items-center gap-2 whitespace-nowrap border-l-[3px] bg-[#1a1512] py-[5px] pl-2.5 pr-2"
+                style={{ borderLeftColor: hex }}
               >
-                ×
-              </button>
-            </li>
-          ))}
+                <span className="font-[family-name:var(--font-mono)] text-[12px]" style={{ color: hex }}>
+                  {i + 1}
+                </span>
+                <span className="label whitespace-nowrap text-[13px] tracking-[0.06em] text-[#f5efe6]">
+                  {car.make} {car.model}
+                </span>
+                <span className="font-[family-name:var(--font-mono)] text-[11px] text-[#6d6459]">
+                  {(Math.round(powerToWeight(car) * 10) / 10).toLocaleString("de-DE", {
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  })}
+                </span>
+                <button
+                  onClick={() => removeCar(car.id)}
+                  aria-label={`${car.make} ${car.model} entfernen`}
+                  className="px-1 text-[#6d6459] transition-colors hover:text-[#f5efe6]"
+                >
+                  ×
+                </button>
+              </li>
+            );
+          })}
         </ul>
 
-        <button onClick={clearCars} className="text-sm text-zinc-500 hover:text-zinc-300">
+        <button onClick={clearCars} className="label text-[11px] tracking-[0.14em] text-[#7d7266] hover:text-[#f5efe6]">
           Leeren
         </button>
 
-        {track ? (
-          <Link
-            href={`/race?cars=${selectedIds.join(",")}&trackId=${track.id}`}
-            className="rounded-full bg-emerald-500 px-5 py-2 font-semibold text-zinc-950 hover:bg-emerald-400"
-          >
-            Rennen auf {track.name}
-          </Link>
-        ) : (
-          <Link
-            href="/"
-            className="rounded-full bg-emerald-500 px-5 py-2 font-semibold text-zinc-950 hover:bg-emerald-400"
-          >
-            Strecke wählen
-          </Link>
-        )}
+        <Link
+          href={track ? `/race?cars=${selectedIds.join(",")}&trackId=${track.id}` : "/"}
+          className="bg-[#e2492f] px-5 py-[11px] font-[family-name:var(--font-anton)] text-[15px] uppercase tracking-[0.03em] text-[#fff5ef] transition-colors hover:bg-[#f2593e]"
+        >
+          {track ? "Rennen starten" : "Strecke wählen"}
+        </Link>
       </div>
     </div>
   );

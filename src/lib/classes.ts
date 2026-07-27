@@ -16,8 +16,12 @@ export interface CarClass {
   min: number | null;
   /** Exclusive upper bound in kg/PS; null on the open end. */
   max: number | null;
-  /** Tailwind colour for the badge. */
+  /** Tailwind colour for text. */
   color: string;
+  /** The same colour as a value, for surfaces that mix it with an alpha channel
+   * (the card's class field). A generated Tailwind class would not survive the
+   * stylesheet build, so the hex has to travel with the class. */
+  hex: string;
 }
 
 /** Six classes over power-to-weight, cut finer at the quick end where a
@@ -26,12 +30,12 @@ export interface CarClass {
  * quantiles of the dataset, so a car's class does not move when the field is
  * reimported. */
 export const carClasses: CarClass[] = [
-  { id: "hyper", name: "Hyper", min: null, max: 3, color: "text-fuchsia-300" },
-  { id: "supersport", name: "Supersport", min: 3, max: 5, color: "text-red-300" },
-  { id: "sport", name: "Sport", min: 5, max: 7, color: "text-orange-300" },
-  { id: "gt", name: "GT", min: 7, max: 10, color: "text-amber-300" },
-  { id: "kompakt", name: "Kompakt", min: 10, max: 14, color: "text-emerald-300" },
-  { id: "alltag", name: "Alltag", min: 14, max: null, color: "text-sky-300" },
+  { id: "hyper", name: "Hyper", min: null, max: 3, color: "text-fuchsia-300", hex: "#f0abfc" },
+  { id: "supersport", name: "Supersport", min: 3, max: 5, color: "text-red-300", hex: "#fca5a5" },
+  { id: "sport", name: "Sport", min: 5, max: 7, color: "text-orange-300", hex: "#fdba74" },
+  { id: "gt", name: "GT", min: 7, max: 10, color: "text-amber-300", hex: "#fcd34d" },
+  { id: "kompakt", name: "Kompakt", min: 10, max: 14, color: "text-emerald-300", hex: "#6ee7b7" },
+  { id: "alltag", name: "Alltag", min: 14, max: null, color: "text-sky-300", hex: "#7dd3fc" },
 ];
 
 /** The class a car falls into. Every car has one - the outer classes are open
