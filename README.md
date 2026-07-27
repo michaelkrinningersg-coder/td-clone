@@ -93,10 +93,16 @@ Vorwärtslauf beschleunigt dazwischen.
 
 ## Strecken
 
-`npm run import:tracks` lädt die **vermessenen Streckenmittellinien aus OpenStreetMap**,
-veröffentlicht als GeoJSON in [bacinger/f1-circuits](https://github.com/bacinger/f1-circuits),
-und rechnet sie in Meter um `src/data/track-outlines.ts`. Die Daten stehen wie
-OpenStreetMap selbst unter der ODbL, © OpenStreetMap-Mitwirkende.
+`npm run import:tracks` lädt die **vermessenen Streckenmittellinien** und rechnet sie in
+Meter um nach `src/data/track-outlines.ts`. Drei Quellen, unter denen allen
+OpenStreetMap-Vermessungen liegen — die Geometrie steht deshalb durchweg unter der ODbL,
+© OpenStreetMap-Mitwirkende:
+
+| Quelle | was sie beisteuert | Lizenz |
+|---|---|---|
+| [bacinger/f1-circuits](https://github.com/bacinger/f1-circuits) | alle 40 Formel-1-Kurse, GeoJSON in Länge/Breite | ODbL |
+| [tobi/track-atlas](https://github.com/tobi/track-atlas) | der Rest der Rennwelt — IMSA, Le-Mans-Kurse, Clubstrecken | MIT (Repo), ODbL (Geometrie) |
+| [TUMFTM/racetrack-database](https://github.com/TUMFTM/racetrack-database) | DTM-Kurse und das Indianapolis-Oval, CSV bereits in Metern | LGPL-3.0 |
 
 Aus dem Punktzug leitet `src/lib/track-polyline.ts` die Segmente ab: die Krümmung wird
 entlang der Linie gemessen, benachbarte Punkte gleicher Krümmungsrichtung zu einer Kurve
@@ -112,15 +118,22 @@ sich, weil die Vermessung es tut.
 Nur die **Steigungen** sind von Hand gesetzt: OpenStreetMap führt keine Höhen, und eine
 Runde Spa ohne den Anstieg durch Eau Rouge wäre eine andere Strecke. Sie liegen als Bänder
 über dem Rundenanteil in `src/data/tracks.ts` — für Spa, Monaco, Interlagos, den Red Bull
-Ring, Austin, Imola, Mugello, Zandvoort, Portimão, den Nürburgring, Watkins Glen, Kyalami
-und Istanbul. Die flachen Kurse fahren ohne, weil sie es real auch tun.
+Ring, Austin, Imola, Mugello, Zandvoort, Portimão, den Nürburgring, Watkins Glen, Kyalami,
+Istanbul, Laguna Seca (der Corkscrew fällt 18 m auf 140 m), Road Atlanta, Virginia, Mosport,
+Brands Hatch, Road America, Lime Rock und Fuji. Die flachen Kurse fahren ohne, weil sie es
+real auch tun.
 
-**Vierzig vermessene Rundkurse** — alles, was die Quelle führt: Monza, Spa, Monaco, Suzuka,
+**55 vermessene Rundkurse.** Aus der Formel 1 alles, was die Quelle führt: Monza, Spa, Monaco, Suzuka,
 Silverstone, Hungaroring, Interlagos, Montreal, Red Bull Ring, Zandvoort, Baku, Austin,
 Imola, Singapur, Mugello, Jeddah, Mexiko-Stadt, Bahrain, Shanghai, Istanbul, Sepang,
 Melbourne, Portimão, Barcelona, Hockenheim, Nürburgring GP (nicht die Nordschleife),
 Yas Marina, Paul Ricard, Las Vegas, Watkins Glen, Indianapolis, Kyalami, Estoril,
-Magny-Cours, Losail, Miami, Sochi, Madrid, Buenos Aires und Jacarepaguá.
+Magny-Cours, Losail, Miami, Sochi, Madrid, Buenos Aires und Jacarepaguá. Dazu von außerhalb
+der Formel 1: Lime Rock Park, Long Beach, Laguna Seca, Mosport, Road Atlanta, Fuji, Virginia
+International, Daytona (Rundkurs), Sebring, Road America, Brands Hatch, Norisring,
+Oschersleben, Moscow Raceway und das **Indianapolis-Oval** — vier Kurven mit 256 m Radius und
+vier Geraden à 1.036 m. Real sind die mit 9° überhöht; Steilkurven kennt das Modell nicht, im
+Spiel sind es also langsame Kurven.
 
 Dazu vier konstruierte, die jeweils eine andere Frage stellen: Handlingkurs, Stadtkurs
 (rund sechzehn Kurven je Kilometer), Kreisbahn mit 200 m Radius (nur Grip, keine Leistung)

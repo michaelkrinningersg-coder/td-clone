@@ -10,18 +10,25 @@ import {
   BAHRAIN_OUTLINE,
   BAKU_OUTLINE,
   BARCELONA_OUTLINE,
+  BRANDS_HATCH_OUTLINE,
   BUENOS_AIRES_OUTLINE,
+  DAYTONA_OUTLINE,
   ESTORIL_OUTLINE,
+  FUJI_OUTLINE,
   HOCKENHEIM_OUTLINE,
   HUNGARORING_OUTLINE,
   IMOLA_OUTLINE,
   INDIANAPOLIS_OUTLINE,
+  INDIANAPOLIS_OVAL_OUTLINE,
   INTERLAGOS_OUTLINE,
   ISTANBUL_OUTLINE,
   JACAREPAGUA_OUTLINE,
   JEDDAH_OUTLINE,
   KYALAMI_OUTLINE,
+  LAGUNA_SECA_OUTLINE,
   LAS_VEGAS_OUTLINE,
+  LIME_ROCK_OUTLINE,
+  LONG_BEACH_OUTLINE,
   LOSAIL_OUTLINE,
   MADRID_OUTLINE,
   MAGNY_COURS_OUTLINE,
@@ -29,13 +36,20 @@ import {
   MEXIKO_OUTLINE,
   MIAMI_OUTLINE,
   MONACO_OUTLINE,
+  MOSCOW_RACEWAY_OUTLINE,
+  MOSPORT_OUTLINE,
   MONTREAL_OUTLINE,
   MONZA_OUTLINE,
   MUGELLO_OUTLINE,
+  NORISRING_OUTLINE,
   NUERBURGRING_OUTLINE,
+  OSCHERSLEBEN_OUTLINE,
   PAUL_RICARD_OUTLINE,
   PORTIMAO_OUTLINE,
   RED_BULL_RING_OUTLINE,
+  ROAD_AMERICA_OUTLINE,
+  ROAD_ATLANTA_OUTLINE,
+  SEBRING_OUTLINE,
   SEPANG_OUTLINE,
   SHANGHAI_OUTLINE,
   SILVERSTONE_OUTLINE,
@@ -43,6 +57,7 @@ import {
   SOCHI_OUTLINE,
   SPA_FRANCORCHAMPS_OUTLINE,
   SUZUKA_OUTLINE,
+  VIRGINIA_OUTLINE,
   WATKINS_GLEN_OUTLINE,
   YAS_MARINA_OUTLINE,
   ZANDVOORT_OUTLINE,
@@ -200,6 +215,90 @@ const ISTANBUL_GRADIENTS: GradientBand[] = [
   { from: 0.35, to: 0.6, percent: -4 },
   { from: 0.6, to: 0.85, percent: 4 },
   { from: 0.85, to: 1, percent: 2 },
+];
+
+/** Laguna Seca climbs from the line to the top of the hill at turn six and then
+ * throws it all away at once: the Corkscrew drops about 18 m in 140 m, which is
+ * the steepest thing in the game outside Pikes Peak. */
+const LAGUNA_SECA_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.15, percent: 3 },
+  { from: 0.15, to: 0.4, percent: 5 },
+  { from: 0.4, to: 0.55, percent: 4 },
+  { from: 0.55, to: 0.65, percent: -13 },
+  { from: 0.65, to: 0.85, percent: -5 },
+  { from: 0.85, to: 1, percent: -1 },
+];
+
+/** Road Atlanta drops away from the line, climbs the esses, and falls into the
+ * bridge before the long haul back up. */
+const ROAD_ATLANTA_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.12, percent: -3 },
+  { from: 0.12, to: 0.35, percent: 5 },
+  { from: 0.35, to: 0.6, percent: -2 },
+  { from: 0.6, to: 0.8, percent: -6 },
+  { from: 0.8, to: 1, percent: 6 },
+];
+
+/** Virginia rolls the whole way round - roughly 40 m between its lowest and
+ * highest points, and never flat for long. */
+const VIRGINIA_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.2, percent: 3 },
+  { from: 0.2, to: 0.45, percent: -4 },
+  { from: 0.45, to: 0.7, percent: 4 },
+  { from: 0.7, to: 0.85, percent: -5 },
+  { from: 0.85, to: 1, percent: 2 },
+];
+
+/** Mosport falls away from turn one, climbs the back of the circuit and drops
+ * again down to Moss Corner and onto the long straight. */
+const MOSPORT_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.15, percent: -4 },
+  { from: 0.15, to: 0.45, percent: 5 },
+  { from: 0.45, to: 0.65, percent: -2 },
+  { from: 0.65, to: 0.85, percent: -6 },
+  { from: 0.85, to: 1, percent: 4 },
+];
+
+/** Brands Hatch drops off the end of the pit straight into Paddock Hill Bend,
+ * climbs to Druids, and rolls through the Grand Prix loop behind it. */
+const BRANDS_HATCH_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.08, percent: -10 },
+  { from: 0.08, to: 0.15, percent: 8 },
+  { from: 0.15, to: 0.25, percent: -5 },
+  { from: 0.25, to: 0.45, percent: 3 },
+  { from: 0.45, to: 0.7, percent: -3 },
+  { from: 0.7, to: 0.85, percent: 4 },
+  { from: 0.85, to: 1, percent: -2 },
+];
+
+/** Road America runs over Wisconsin hills: up to the Moraine Sweep, down the
+ * back and up again to Canada Corner. */
+const ROAD_AMERICA_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.2, percent: 2 },
+  { from: 0.2, to: 0.4, percent: 4 },
+  { from: 0.4, to: 0.6, percent: -3 },
+  { from: 0.6, to: 0.8, percent: 3 },
+  { from: 0.8, to: 1, percent: -4 },
+];
+
+/** Lime Rock names two of its corners after the hill: the Uphill and, right
+ * after it, the Downhill. */
+const LIME_ROCK_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.3, percent: -2 },
+  { from: 0.3, to: 0.5, percent: 4 },
+  { from: 0.5, to: 0.7, percent: 6 },
+  { from: 0.7, to: 0.9, percent: -6 },
+  { from: 0.9, to: 1, percent: -2 },
+];
+
+/** Fuji rises and falls about 40 m over a lap, most of it in the middle
+ * sector; the bands are that overall shape rather than corner by corner. */
+const FUJI_GRADIENTS: GradientBand[] = [
+  { from: 0, to: 0.25, percent: -2 },
+  { from: 0.25, to: 0.5, percent: 4 },
+  { from: 0.5, to: 0.7, percent: 2 },
+  { from: 0.7, to: 0.9, percent: -4 },
+  { from: 0.9, to: 1, percent: -2 },
 ];
 
 function circuit(name: string, outline: [number, number][], gradients?: GradientBand[]): TrackDefinition {
@@ -425,6 +524,23 @@ export const tracks: TrackDefinition[] = [
   circuit("Madrid", MADRID_OUTLINE),
   circuit("Buenos Aires", BUENOS_AIRES_OUTLINE),
   circuit("Jacarepaguá", JACAREPAGUA_OUTLINE),
+
+  // Outside Formula 1: American road courses, the DTM circuits and one oval.
+  circuit("Lime Rock Park", LIME_ROCK_OUTLINE, LIME_ROCK_GRADIENTS),
+  circuit("Long Beach", LONG_BEACH_OUTLINE),
+  circuit("Laguna Seca", LAGUNA_SECA_OUTLINE, LAGUNA_SECA_GRADIENTS),
+  circuit("Mosport", MOSPORT_OUTLINE, MOSPORT_GRADIENTS),
+  circuit("Road Atlanta", ROAD_ATLANTA_OUTLINE, ROAD_ATLANTA_GRADIENTS),
+  circuit("Fuji", FUJI_OUTLINE, FUJI_GRADIENTS),
+  circuit("Virginia International", VIRGINIA_OUTLINE, VIRGINIA_GRADIENTS),
+  circuit("Daytona Rundkurs", DAYTONA_OUTLINE),
+  circuit("Sebring", SEBRING_OUTLINE),
+  circuit("Road America", ROAD_AMERICA_OUTLINE, ROAD_AMERICA_GRADIENTS),
+  circuit("Brands Hatch", BRANDS_HATCH_OUTLINE, BRANDS_HATCH_GRADIENTS),
+  circuit("Norisring", NORISRING_OUTLINE),
+  circuit("Oschersleben", OSCHERSLEBEN_OUTLINE),
+  circuit("Moscow Raceway", MOSCOW_RACEWAY_OUTLINE),
+  circuit("Indianapolis Oval", INDIANAPOLIS_OVAL_OUTLINE),
   circuit("Handlingkurs", handlingCourse(2000)),
   circuit("Kreisbahn 200 m", circleOutline(200)),
   circuit("Stadtkurs eng", cityLoop(2500)),

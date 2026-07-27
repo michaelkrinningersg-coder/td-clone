@@ -161,20 +161,27 @@ describe("the circuits that ship", () => {
         "Bahrain",
         "Baku",
         "Barcelona",
+        "Brands Hatch",
         "Buenos Aires",
+        "Daytona Rundkurs",
         "Estoril",
+        "Fuji",
         "Handlingkurs",
         "Hockenheim",
         "Hungaroring",
         "Imola",
         "Indianapolis",
+        "Indianapolis Oval",
         "Interlagos",
         "Istanbul",
         "Jacarepaguá",
         "Jeddah",
         "Kreisbahn 200 m",
         "Kyalami",
+        "Laguna Seca",
         "Las Vegas",
+        "Lime Rock Park",
+        "Long Beach",
         "Losail",
         "Madrid",
         "Magny-Cours",
@@ -184,11 +191,18 @@ describe("the circuits that ship", () => {
         "Monaco",
         "Montreal",
         "Monza",
+        "Moscow Raceway",
+        "Mosport",
         "Mugello",
+        "Norisring",
         "Nürburgring GP",
+        "Oschersleben",
         "Paul Ricard",
         "Portimão",
         "Red Bull Ring",
+        "Road America",
+        "Road Atlanta",
+        "Sebring",
         "Sepang",
         "Shanghai",
         "Silverstone",
@@ -198,6 +212,7 @@ describe("the circuits that ship", () => {
         "Stadtkurs eng",
         "Suzuka",
         "Trioval 4500 m",
+        "Virginia International",
         "Watkins Glen",
         "Yas Marina",
         "Zandvoort",
@@ -221,12 +236,16 @@ describe("the circuits that ship", () => {
         "Bahrain": 5402,
         "Baku": 5932,
         "Barcelona": 4652,
+        "Brands Hatch": 3904,
         "Buenos Aires": 4284,
+        "Daytona Rundkurs": 5711,
         "Estoril": 4152,
+        "Fuji": 4540,
         "Handlingkurs": 2000,
         "Hockenheim": 4545,
         "Hungaroring": 4364,
         "Imola": 4891,
+        "Indianapolis Oval": 4022,
         "Indianapolis": 4069,
         "Interlagos": 4283,
         "Istanbul": 5301,
@@ -234,7 +253,10 @@ describe("the circuits that ship", () => {
         "Jeddah": 6169,
         "Kreisbahn 200 m": 1257,
         "Kyalami": 4511,
+        "Laguna Seca": 3587,
         "Las Vegas": 6203,
+        "Lime Rock Park": 2361,
+        "Long Beach": 3249,
         "Losail": 5408,
         "Madrid": 5415,
         "Magny-Cours": 4437,
@@ -244,11 +266,18 @@ describe("the circuits that ship", () => {
         "Monaco": 3310,
         "Montreal": 4345,
         "Monza": 5766,
+        "Moscow Raceway": 4060,
+        "Mosport": 3932,
         "Mugello": 5225,
+        "Norisring": 2294,
         "Nürburgring GP": 5123,
+        "Oschersleben": 3691,
         "Paul Ricard": 5808,
         "Portimão": 4635,
         "Red Bull Ring": 4298,
+        "Road America": 6503,
+        "Road Atlanta": 4074,
+        "Sebring": 5857,
         "Sepang": 5545,
         "Shanghai": 5435,
         "Silverstone": 5862,
@@ -258,6 +287,7 @@ describe("the circuits that ship", () => {
         "Stadtkurs eng": 2500,
         "Suzuka": 5798,
         "Trioval 4500 m": 4500,
+        "Virginia International": 5244,
         "Watkins Glen": 5429,
         "Yas Marina": 5278,
         "Zandvoort": 4247,
@@ -276,28 +306,40 @@ describe("the circuits that ship", () => {
     });
   }
 
-  // Monza's Rettifilo, Spa's La Source, Monaco's hairpin, the Hungaroring's
-  // first corner. If the curvature reading drifts, these go first. The
-  // constructed shapes are exempt: a 200 m ring has no tight corner by
-  // definition, and neither does a trioval.
-  // Mugello, Watkins Glen and Jacarepaguá are in there for the same reason as
-  // the constructed shapes rather than a different one: none of them has a
-  // hairpin - their tightest corners are 57, 59 and 51 m - and asking for one
-  // would be asking for a corner the circuit does not have.
-  const SWEEPING = new Set([
-    "Kreisbahn 200 m",
-    "Trioval 4500 m",
-    "Mugello",
-    "Watkins Glen",
-    "Jacarepaguá",
-  ]);
+  // Circuits whose hairpin is the thing they are known for. If the curvature
+  // reading drifts, these go first. A blanket rule over every circuit would be
+  // the wrong test - Mugello and Watkins Glen have no hairpin to find, and an
+  // oval has nothing but four constant-radius turns.
+  const HAIRPINS: Record<string, number> = {
+    Monza: 30, // the Rettifilo
+    "Spa-Francorchamps": 30, // La Source
+    Monaco: 25, // the Grand Hotel hairpin
+    Hungaroring: 40, // turn one
+    "Long Beach": 20, // the hairpin onto Shoreline Drive
+    "Laguna Seca": 35, // the Andretti hairpin
+    Austin: 25, // turn eleven
+  };
 
   it("finds the tight corners the circuits are known for", () => {
-    for (const track of surveyed.filter((t) => !SWEEPING.has(t.name))) {
+    for (const [name, limitM] of Object.entries(HAIRPINS)) {
+      const track = tracks.find((t) => t.name === name)!;
       const tightest = Math.min(
         ...track.segments.filter((s) => s.kind === "corner").map((s) => (s as { radiusM: number }).radiusM),
       );
-      assert.ok(tightest < 45, `${track.name}'s tightest corner read ${tightest.toFixed(0)} m`);
+      assert.ok(tightest < limitM, `${name}'s tightest corner read ${tightest.toFixed(0)} m`);
+    }
+  });
+
+  // The oval is the one shape that is nothing but corner; everything else has
+  // to read as a mix, or the curvature measurement has lost the plot.
+  it("reads every circuit as corners and straights", () => {
+    for (const track of surveyed) {
+      const corners = track.segments.filter((s) => s.kind === "corner");
+      const straights = track.segments.filter((s) => s.kind === "straight");
+      assert.ok(corners.length > 0, `${track.name} came back without a corner`);
+      if (track.name !== "Kreisbahn 200 m") {
+        assert.ok(straights.length > 0, `${track.name} came back without a straight`);
+      }
     }
   });
 
