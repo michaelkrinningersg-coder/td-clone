@@ -27,33 +27,35 @@ export interface RandomGridOptions {
   excludeIds?: ReadonlySet<string>;
   /** Restricts the draw to one class, e.g. to fill a field around a car. */
   classId?: string;
-  /** At most one car per marque, so a field is not four Audis. */
-  onePerMake?: boolean;
+  /** At most this many cars per marque, so a field is not eleven Audis.
+   * Undefined lets a marque take the whole grid. */
+  maxPerMake?: number;
   random?: () => number;
 }
 
 /** Builds a random grid from the cars offered, honouring the options in the
- * order they narrow the pool: class, then already-timed cars, then the one-per-
- * marque rule while drawing. */
+ * order they narrow the pool: class, then already-timed cars, then the
+ * per-marque limit while drawing. */
 export function randomGrid(pool: readonly CarData[], options: RandomGridOptions): CarData[] {
-  const { count, excludeIds, classId, onePerMake, random = Math.random } = options;
+  const { count, excludeIds, classId, maxPerMake, random = Math.random } = options;
 
   let candidates = pool;
   if (classId) candidates = candidates.filter((car) => carClassOf(car).id === classId);
   if (excludeIds && excludeIds.size > 0) candidates = candidates.filter((car) => !excludeIds.has(car.id));
 
-  if (!onePerMake) return pickRandom(candidates, count, random);
+  if (maxPerMake === undefined) return pickRandom(candidates, count, random);
 
-  // Drawing one at a time and dropping the marque afterwards keeps every make
-  // equally likely, which picking a make first would not.
+  // Drawing one at a time and dropping a marque once it is full keeps every
+  // make equally likely, which picking a make first would not.
   const picked: CarData[] = [];
-  const usedMakes = new Set<string>();
+  const perMake = new Map<string, number>();
   let remaining = [...candidates];
   while (picked.length < count && remaining.length > 0) {
     const [car] = pickRandom(remaining, 1, random);
     picked.push(car);
-    usedMakes.add(car.make);
-    remaining = remaining.filter((c) => !usedMakes.has(c.make));
+    const taken = (perMake.get(car.make) ?? 0) + 1;
+    perMake.set(car.make, taken);
+    remaining = remaining.filter((c) => c.id !== car.id && (perMake.get(c.make) ?? 0) < maxPerMake);
   }
   return picked;
 }

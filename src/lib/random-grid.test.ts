@@ -88,7 +88,7 @@ describe("randomGrid", () => {
   });
 
   it("takes at most one car per marque when asked", () => {
-    const picked = randomGrid(pool, { count: 5, onePerMake: true, random: sequence([0]) });
+    const picked = randomGrid(pool, { count: 5, maxPerMake: 1, random: sequence([0]) });
     const makes = picked.map((c) => c.make);
     assert.equal(new Set(makes).size, makes.length);
     assert.equal(picked.length, 4); // Audi appears twice in the pool
@@ -102,7 +102,7 @@ describe("randomGrid", () => {
   it("combines the rules", () => {
     const picked = randomGrid(pool, {
       count: 5,
-      onePerMake: true,
+      maxPerMake: 1,
       excludeIds: new Set(["a"]),
       random: sequence([0]),
     });
@@ -139,5 +139,29 @@ describe("fieldAround", () => {
   it("returns a shorter field when the class does not hold enough cars", () => {
     const field = fieldAround(golf, [golf, ...sameClass], 30, { random: sequence([0.5]) });
     assert.equal(field.length, 4);
+  });
+});
+
+describe("randomGrid with a per-marque limit", () => {
+  const pool = [
+    car({ id: "audi-1", make: "Audi" }),
+    car({ id: "audi-2", make: "Audi" }),
+    car({ id: "audi-3", make: "Audi" }),
+    car({ id: "bmw-1", make: "BMW" }),
+    car({ id: "bmw-2", make: "BMW" }),
+    car({ id: "bmw-3", make: "BMW" }),
+  ];
+
+  it("lets a marque have two but not three", () => {
+    const picked = randomGrid(pool, { count: 6, maxPerMake: 2, random: sequence([0]) });
+    const perMake = new Map<string, number>();
+    for (const c of picked) perMake.set(c.make, (perMake.get(c.make) ?? 0) + 1);
+    assert.equal(picked.length, 4);
+    for (const [make, n] of perMake) assert.ok(n <= 2, `${make} got ${n}`);
+  });
+
+  it("draws no car twice", () => {
+    const picked = randomGrid(pool, { count: 4, maxPerMake: 2, random: sequence([0]) });
+    assert.equal(new Set(picked.map((c) => c.id)).size, picked.length);
   });
 });

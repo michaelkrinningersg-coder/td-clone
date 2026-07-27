@@ -14,6 +14,9 @@ import { carMatches } from "@/components/CarList";
  * season nobody finishes; ten is an evening. */
 const CALENDAR_SIZE = 10;
 
+/** Cars one marque may have on the grid when the field is drawn. */
+const MAX_PER_MAKE = 2;
+
 /** Building a championship: thirty cars and a calendar.
  *
  * It arrives ready to start - ten tracks drawn out of the seventy, then thirty
@@ -29,6 +32,9 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [onlyUnfinished, setOnlyUnfinished] = useState(true);
+  // Fifty cars drawn out of five thousand would otherwise put eleven BMWs on
+  // the grid, which is a manufacturer test and not a championship.
+  const [twoPerMake, setTwoPerMake] = useState(true);
 
   // Which tracks each car has already been round. Loaded once: a championship
   // is set up in one sitting, and nothing here writes times.
@@ -63,7 +69,11 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
     const drawn = pickRandom(tracks, CALENDAR_SIZE, Math.random).map((t) => t.id);
     setCalendar(drawn);
     setField(
-      randomGrid(cars, { count: CHAMPIONSHIP_SIZE, excludeIds: coveredBy(drawn) }).map((c) => c.id),
+      randomGrid(cars, {
+        count: CHAMPIONSHIP_SIZE,
+        excludeIds: coveredBy(drawn),
+        maxPerMake: MAX_PER_MAKE,
+      }).map((c) => c.id),
     );
   }
 
@@ -92,7 +102,7 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
   }
 
   function fillFrom(car: CarData) {
-    setField(fieldAround(car, cars, CHAMPIONSHIP_SIZE, { onePerMake: false }).map((c) => c.id));
+    setField(fieldAround(car, cars, CHAMPIONSHIP_SIZE, {}).map((c) => c.id));
     setQuery("");
   }
 
@@ -102,6 +112,7 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
         count: CHAMPIONSHIP_SIZE,
         classId,
         excludeIds: onlyUnfinished ? completeIds : undefined,
+        maxPerMake: twoPerMake ? MAX_PER_MAKE : undefined,
       }).map((c) => c.id),
     );
   }
@@ -204,6 +215,17 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
         </div>
 
         <label className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+          <input
+            type="checkbox"
+            checked={twoPerMake}
+            onChange={(e) => setTwoPerMake(e.target.checked)}
+            className="h-3.5 w-3.5 accent-emerald-500"
+          />
+          Höchstens {MAX_PER_MAKE} Autos je Marke
+          <span className="text-zinc-600">— sonst stellt eine große Marke halb allein das Feld</span>
+        </label>
+
+        <label className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
           <input
             type="checkbox"
             checked={onlyUnfinished}

@@ -31,7 +31,7 @@ export function RandomFill({
     const grid = randomGrid(pool, {
       count,
       excludeIds: timedCarIds,
-      onePerMake,
+      maxPerMake: onePerMake ? 1 : undefined,
     });
     setCars(grid.map((car) => car.id));
     setDrawn(grid.length);
