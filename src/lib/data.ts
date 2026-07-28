@@ -3,7 +3,7 @@ import { tracks as trackDefs } from "@/data/tracks";
 import { trackLengthM, type Segment, type SpeedTest } from "@/lib/track-types";
 import { carSlug, slugify, trackSlug } from "@/lib/slug";
 import type { Drivetrain } from "@/lib/physics";
-import type { BrakeKind } from "@/lib/car-import";
+import type { BrakeKind, GearboxKind } from "@/lib/car-import";
 
 /** Cars and tracks are immutable reference data, so both the SQLite path and the
  * static Pages build read them from these same seed files - there is no second
@@ -27,11 +27,15 @@ export interface CarData {
   dragCoefficient: number;
   widthMm: number;
   heightMm: number;
+  /** Distance between the axles - see `tractionLimitedDriveN`. */
+  wheelbaseMm: number;
   brakeFront: BrakeKind;
   brakeRear: BrakeKind;
   tyreWidthMm: number;
   gearCount: number;
   manualGearbox: boolean;
+  /** What kind of gearbox, which is what decides how long a shift takes. */
+  gearboxKind: GearboxKind;
 }
 
 export interface TrackData {

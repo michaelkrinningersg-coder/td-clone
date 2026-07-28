@@ -4,6 +4,8 @@ import {
   airDensityRatio,
   altitudePowerFactor,
   bankedGripFactor,
+  brakeFadeFactor,
+  brakeHeatProfile,
   brakingDecelMps2,
   corneringSpeedCapMps,
   buildGearbox,
@@ -19,6 +21,8 @@ import {
   simulateRun,
   simulateSpeedTest,
   simulateTrack,
+  solveLaunchGrip,
+  tractionLimitedDriveN,
   wheelPowerW,
   type CarPhysicsInput,
 } from "./physics";
@@ -37,9 +41,11 @@ const golfGti: CarPhysicsInput = {
   heightMm: 1492,
   brakeFront: "ventilated-disc" as const,
   brakeRear: "disc" as const,
+  wheelbaseMm: 2650,
   tyreWidthMm: 225,
   gearCount: 6,
   manualGearbox: true,
+  gearboxKind: "manual" as const,
 };
 
 const veyron: CarPhysicsInput = {
@@ -54,9 +60,11 @@ const veyron: CarPhysicsInput = {
   heightMm: 1204,
   brakeFront: "ventilated-disc" as const,
   brakeRear: "ventilated-disc" as const,
+  wheelbaseMm: 2650,
   tyreWidthMm: 365,
   gearCount: 7,
   manualGearbox: false,
+  gearboxKind: "automatic" as const,
 };
 
 const longStraight: Segment[] = [{ kind: "straight", lengthM: 8000, gradientPercent: 0 }];
@@ -379,6 +387,93 @@ describe("banking", () => {
   });
 });
 
+describe("weight transfer", () => {
+  // Where the engine sits would settle the static split, and the source carries
+  // no such field for any car - so what the model does have is the wheelbase and
+  // the height, which decide the part that changes with how hard the car pulls.
+  it("loads a rear-driven car's tyres and unloads a front-driven one's", () => {
+    const rwd = tractionLimitedDriveN({ ...golfGti, drivetrain: "RWD" }, 1, 0);
+    const fwd = tractionLimitedDriveN({ ...golfGti, drivetrain: "FWD" }, 1, 0);
+    assert.ok(rwd > fwd, `${rwd.toFixed(0)} N rear-driven should beat ${fwd.toFixed(0)} N front-driven`);
+  });
+
+  it("gives four-wheel drive the whole weight and no transfer at all", () => {
+    const awd = { ...golfGti, drivetrain: "AWD" as const };
+    assert.ok(Math.abs(tractionLimitedDriveN(awd, 1, 0) - awd.weightKg * 9.81) < 1);
+    // The transfer moves load between driven axles, so resistance cannot change it.
+    assert.equal(tractionLimitedDriveN(awd, 1, 0), tractionLimitedDriveN(awd, 1, 5000));
+  });
+
+  it("transfers less in a long, low car than in a short, tall one", () => {
+    const long = { ...golfGti, drivetrain: "RWD" as const, wheelbaseMm: 3200, heightMm: 1300 };
+    const short = { ...golfGti, drivetrain: "RWD" as const, wheelbaseMm: 2200, heightMm: 1800 };
+    assert.ok(tractionLimitedDriveN(short, 1, 0) > tractionLimitedDriveN(long, 1, 0));
+    // ...and the front-driven pair is the other way round, for the same reason.
+    assert.ok(
+      tractionLimitedDriveN({ ...short, drivetrain: "FWD" }, 1, 0) <
+        tractionLimitedDriveN({ ...long, drivetrain: "FWD" }, 1, 0),
+    );
+  });
+
+  it("stays finite at a grip that would stand the car on its back wheels", () => {
+    const force = tractionLimitedDriveN({ ...golfGti, drivetrain: "RWD" }, 5, 0);
+    assert.ok(Number.isFinite(force) && force > 0, `${force}`);
+  });
+
+  // The solved figure is now a friction coefficient rather than a force, so it
+  // has to land where a road tyre actually lives.
+  it("solves a launch grip a real tyre could have", () => {
+    for (const car of [golfGti, veyron]) {
+      const grip = solveLaunchGrip(car);
+      assert.ok(grip > 0.5 && grip < 2, `${grip.toFixed(2)} is not a road tyre`);
+    }
+  });
+});
+
+describe("brake fade", () => {
+  it("leaves cool brakes alone and floors a cooked set", () => {
+    assert.equal(brakeFadeFactor(0), 1);
+    assert.equal(brakeFadeFactor(1), 1);
+    assert.ok(brakeFadeFactor(1.5) < 1);
+    assert.ok(brakeFadeFactor(2) < brakeFadeFactor(1.5));
+    assert.ok(brakeFadeFactor(100) >= 0.6, "a faded brake is a bad brake, not no brake");
+  });
+
+  // Heat in where the car is slowing, heat out according to how fast it is
+  // going - which is why the brakes come back on a straight.
+  it("heats under braking and cools again at speed", () => {
+    const braking = [70, 60, 50, 40, 30, 20];
+    const heating = brakeHeatProfile(golfGti, braking, 5);
+    for (let i = 1; i < heating.length; i++) assert.ok(heating[i] > heating[i - 1]);
+
+    const thenCruising = [...braking, ...Array.from({ length: 400 }, () => 70)];
+    const cooling = brakeHeatProfile(golfGti, thenCruising, 5);
+    const atEndOfBraking = cooling[braking.length - 2];
+    assert.ok(cooling[cooling.length - 1] < atEndOfBraking, "a long straight should cool them");
+  });
+
+  it("cooks drums where it barely warms ventilated discs", () => {
+    const braking = [70, 60, 50, 40, 30, 20];
+    const vented = brakeHeatProfile({ ...golfGti, brakeFront: "ventilated-disc", brakeRear: "ventilated-disc" }, braking, 5);
+    const drums = brakeHeatProfile({ ...golfGti, brakeFront: "drum", brakeRear: "drum" }, braking, 5);
+    assert.ok(drums[drums.length - 1] > vented[vented.length - 1] * 2);
+  });
+
+  it("never troubles the brakes on a lap with nothing to brake for", () => {
+    const oval = tracks.find((t) => t.name === "Kreisbahn 200 m")!;
+    assert.equal(simulateTrack(golfGti, oval).peakBrakeHeat, 0);
+  });
+
+  // A real circuit with real braking zones, and the car that goes there on drums.
+  it("gets a drum-braked car past the fading point on a hard circuit", () => {
+    const sochi = tracks.find((t) => t.name === "Sochi")!;
+    const drums = { ...golfGti, brakeFront: "drum" as const, brakeRear: "drum" as const };
+    const vented = { ...golfGti, brakeFront: "ventilated-disc" as const, brakeRear: "ventilated-disc" as const };
+    assert.ok(simulateTrack(drums, sochi).peakBrakeHeat > 1);
+    assert.ok(simulateTrack(vented, sochi).peakBrakeHeat < simulateTrack(drums, sochi).peakBrakeHeat);
+  });
+});
+
 describe("tyres", () => {
   it("carries more speed through a corner on wider tyres", () => {
     const corner: Segment[] = [
@@ -410,11 +505,16 @@ describe("gearbox", () => {
     assert.ok(middling < time(9), `6 gears (${middling}ms) should beat 9 (${time(9)}ms)`);
   });
 
-  it("costs a manual more per shift than an automatic", () => {
+  // A dual-clutch box swaps clutches with the next gear already engaged, a
+  // torque converter slurs through it, a manual needs the driver, and an
+  // automated single-clutch box does everything a manual does with an actuator.
+  it("costs each kind of gearbox its own time per shift", () => {
     const straight: Segment[] = [{ kind: "straight", lengthM: 2000 }];
-    const manual = simulateRun({ ...golfGti, manualGearbox: true }, straight).totalTimeMs;
-    const auto = simulateRun({ ...golfGti, manualGearbox: false }, straight).totalTimeMs;
-    assert.ok(manual > auto);
+    const time = (gearboxKind: CarPhysicsInput["gearboxKind"]) =>
+      simulateRun({ ...golfGti, gearboxKind }, straight).totalTimeMs;
+    assert.ok(time("dual-clutch") < time("automatic"), "a DCT should beat a torque converter");
+    assert.ok(time("automatic") < time("manual"), "a torque converter should beat a manual");
+    assert.ok(time("manual") < time("sequential"), "a manual should beat an automated single clutch");
   });
 });
 

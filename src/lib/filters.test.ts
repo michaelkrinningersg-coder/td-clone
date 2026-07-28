@@ -28,9 +28,11 @@ const car: CarData = {
   heightMm: 1435,
   brakeFront: "ventilated-disc",
   brakeRear: "disc",
+  wheelbaseMm: 2650,
   tyreWidthMm: 235,
   gearCount: 6,
   manualGearbox: true,
+  gearboxKind: "manual" as const,
 };
 
 const filter = (over: Partial<CarFilter>): CarFilter => ({ ...EMPTY_FILTER, ...over });

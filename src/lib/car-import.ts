@@ -47,18 +47,23 @@ export interface ImportedCar {
   dragCoefficient: number;
   widthMm: number;
   heightMm: number;
+  /** Distance between the axles. With the body height it fixes how much load
+   * moves rearward under acceleration - see `tractionLimitedDriveN`. */
+  wheelbaseMm: number;
   brakeFront: BrakeKind;
   brakeRear: BrakeKind;
   /** Tread width in mm, e.g. 225 from "225/50 R17". */
   tyreWidthMm: number;
   gearCount: number;
   manualGearbox: boolean;
+  gearboxKind: GearboxKind;
 }
 
 export const SPEC_FIELDS = {
   drag: ["Dimensions", "Aerodynamics (Cd):"],
   width: ["Dimensions", "Width:"],
   height: ["Dimensions", "Height:"],
+  wheelbase: ["Dimensions", "Wheelbase:"],
   brakeFront: ["Brakes Specs", "Front:"],
   brakeRear: ["Brakes Specs", "Rear:"],
   tyres: ["Tires Specs", "Tire Size:"],
@@ -165,15 +170,48 @@ export function parseTyreWidthMm(raw: string | undefined): number | null {
   return width >= 100 && width <= 400 ? width : null;
 }
 
-/** "6-Speed Manual" / "8-Speed Automatic" */
-export function parseGearbox(raw: string | undefined): { gearCount: number; manual: boolean } | null {
+/** What kind of gearbox it is, which is what decides how long a shift takes.
+ *
+ * The source names it: "6-Speed Manual", "8-Speed Automatic", "7-Speed DCT",
+ * "Amg Speedshift Mct". Four kinds cover 99,9 % of the field, and anything the
+ * string does not pin down is read as a torque-converter automatic - which is
+ * what an unqualified "Automatic" almost always is. That does mislabel the
+ * handful of dual-clutch boxes a manufacturer chose to advertise as plain
+ * automatics; they lose a tenth per shift they should not. */
+export type GearboxKind = "manual" | "automatic" | "dual-clutch" | "sequential" | "cvt";
+
+export function parseGearboxKind(raw: string): GearboxKind {
+  if (/\bcvt\b|continuously variable/i.test(raw)) return "cvt";
+  if (
+    /dct|dsg|pdk|\btct\b|\bmct\b|(dual|double|twin)[- ]?(dry )?clutch|s[- ]?tronic|powershift|dualogic|speedshift|drivelogic/i.test(
+      raw,
+    )
+  ) {
+    return "dual-clutch";
+  }
+  if (
+    /sequential|selespeed|automated manual|\bamt\b|robot|sensodrive|easytronic|single[- ]?clutch|\bismt\b/i.test(
+      raw,
+    )
+  ) {
+    return "sequential";
+  }
+  if (/automat|hydra[- ]?matic|tiptronic|steptronic|multitronic/i.test(raw)) return "automatic";
+  if (/manual/i.test(raw)) return "manual";
+  return "automatic";
+}
+
+export function parseGearbox(
+  raw: string | undefined,
+): { gearCount: number; manual: boolean; kind: GearboxKind } | null {
   const v = (raw ?? "").trim();
   if (!v) return null;
   const m = v.match(/(\d{1,2})\s*-?\s*speed/i);
   if (!m) return null;
   const gearCount = Number.parseInt(m[1], 10);
   if (gearCount < 1 || gearCount > 12) return null;
-  return { gearCount, manual: /manual/i.test(v) };
+  const kind = parseGearboxKind(v);
+  return { gearCount, manual: kind === "manual", kind };
 }
 
 /** Names that plain titlecasing gets wrong. */
@@ -297,6 +335,7 @@ export function convertEngine(
   const dragCoefficient = parseDragCoefficient(spec(engine, SPEC_FIELDS.drag));
   const widthMm = parseMillimetres(spec(engine, SPEC_FIELDS.width));
   const heightMm = parseMillimetres(spec(engine, SPEC_FIELDS.height));
+  const wheelbaseMm = parseMillimetres(spec(engine, SPEC_FIELDS.wheelbase));
   const brakeFront = parseBrake(spec(engine, SPEC_FIELDS.brakeFront));
   const brakeRear = parseBrake(spec(engine, SPEC_FIELDS.brakeRear));
   const tyreWidthMm = parseTyreWidthMm(spec(engine, SPEC_FIELDS.tyres));
@@ -316,6 +355,7 @@ export function convertEngine(
     dragCoefficient === null ||
     widthMm === null ||
     heightMm === null ||
+    wheelbaseMm === null ||
     !brakeFront ||
     !brakeRear ||
     tyreWidthMm === null ||
@@ -339,11 +379,13 @@ export function convertEngine(
     dragCoefficient,
     widthMm,
     heightMm,
+    wheelbaseMm,
     brakeFront,
     brakeRear,
     tyreWidthMm,
     gearCount: gearbox.gearCount,
     manualGearbox: gearbox.manual,
+    gearboxKind: gearbox.kind,
   };
 }
 
@@ -486,6 +528,9 @@ export function isPlausible(car: ImportedCar): boolean {
     car.widthMm <= 2600 &&
     car.heightMm >= 900 &&
     car.heightMm <= 2600 &&
+    // A Smart is 1.867 m between the axles, a long-wheelbase limousine 3.7.
+    car.wheelbaseMm >= 1500 &&
+    car.wheelbaseMm <= 4500 &&
     car.tyreWidthMm >= 100 &&
     car.tyreWidthMm <= 400 &&
     car.gearCount >= 1 &&

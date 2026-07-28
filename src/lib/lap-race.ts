@@ -3,7 +3,7 @@ import {
   altitudeModifiers,
   brakingDecelMps2,
   simulateRun,
-  solveLaunchLimitN,
+  solveLaunchGrip,
   buildGearbox,
 } from "@/lib/physics";
 
@@ -222,13 +222,13 @@ export function tyreGrip(used: number): number {
 }
 
 export function carPace(car: CarData, track: TrackData): CarPace {
-  const launchLimitN = solveLaunchLimitN(car, buildGearbox(car));
+  const launchGrip = solveLaunchGrip(car, buildGearbox(car));
   // The circuit's own air multiplies into whatever the race is doing to the
   // car, rather than replacing it - a lap in the tow at Mexiko-Stadt is both.
   const air = altitudeModifiers(car, track.altitudeM);
   const run = (mods: { powerFactor?: number; gripFactor?: number; dragFactor?: number }) =>
     simulateRun(car, track.segments, {
-      launchLimitN,
+      launchGrip,
       ...mods,
       powerFactor: (mods.powerFactor ?? 1) * air.powerFactor,
       dragFactor: (mods.dragFactor ?? 1) * air.dragFactor,

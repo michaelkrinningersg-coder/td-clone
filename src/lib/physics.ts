@@ -1,5 +1,5 @@
 import type { Segment, SpeedTest } from "./track-types";
-import type { BrakeKind } from "./car-import";
+import type { BrakeKind, GearboxKind } from "./car-import";
 
 const G = 9.81;
 const KPH_TO_MPS = 1 / 3.6;
@@ -34,8 +34,12 @@ export interface CarPhysicsInput {
   brakeFront: BrakeKind;
   brakeRear: BrakeKind;
   tyreWidthMm: number;
+  /** Distance between the axles, which sets how much load moves rearward under
+   * acceleration - see `tractionLimitedDriveN`. */
+  wheelbaseMm: number;
   gearCount: number;
   manualGearbox: boolean;
+  gearboxKind: GearboxKind;
 }
 
 export interface TracePoint {
@@ -52,6 +56,9 @@ export interface SimResult {
   /** Metres actually covered. The same as the track's length for a lap; on a
    * speed test it is whatever the car needed. */
   distanceM: number;
+  /** Hottest the brakes got over the run, as a multiple of what they can take
+   * before fading: at or below 1 they never complained. */
+  peakBrakeHeat: number;
 }
 
 export const SECTOR_COUNT = 3;
@@ -70,8 +77,25 @@ const BRAKE_G: Record<BrakeKind, number> = {
 const DRIVETRAIN_EFFICIENCY = 0.85;
 const PS_TO_WATT = 735.5;
 
-/** Time lost to one gearchange. A manual needs the clutch and the driver. */
-const SHIFT_TIME_S = { manual: 0.45, automatic: 0.2 };
+/** Time lost to one gearchange, by what kind of gearbox is fitted.
+ *
+ * A dual-clutch box has the next gear already engaged and swaps clutches, so it
+ * barely interrupts the drive. A torque converter slurs through it. A manual
+ * needs the clutch and the driver. An automated single-clutch box - Selespeed,
+ * Easytronic, the early sequentials - has to do everything a manual does with
+ * an actuator, and is the slowest thing here. A CVT never changes gear at all. */
+const SHIFT_TIME_S: Record<GearboxKind, number> = {
+  "dual-clutch": 0.05,
+  automatic: 0.25,
+  manual: 0.45,
+  sequential: 0.6,
+  cvt: 0,
+};
+
+/** How long one gearchange costs this car. */
+export function shiftTimeS(car: CarPhysicsInput): number {
+  return SHIFT_TIME_S[car.gearboxKind];
+}
 
 export function frontalAreaM2(car: CarPhysicsInput): number {
   return FRONTAL_AREA_FACTOR * (car.widthMm / 1000) * (car.heightMm / 1000);
@@ -109,10 +133,82 @@ export function dragForceN(car: CarPhysicsInput, speedMps: number): number {
   return 0.5 * AIR_DENSITY * car.dragCoefficient * frontalAreaM2(car) * speedMps * speedMps;
 }
 
-/** How hard the car can brake, from what is fitted front and rear. The front
- * does most of the work under braking, so it weighs heavier. */
+/** How hard the car can brake cold, from what is fitted front and rear. The
+ * front does most of the work under braking, so it weighs heavier. */
 export function brakingDecelMps2(car: CarPhysicsInput): number {
   return (BRAKE_G[car.brakeFront] * 0.65 + BRAKE_G[car.brakeRear] * 0.35) * G;
+}
+
+/** Braking energy per kilogram of car the brakes take before they start to give
+ * way, and how quickly they shed it again.
+ *
+ * A ventilated disc has air running through it and holds up; a solid disc has
+ * only its face; a drum encloses the heat and is the first thing to go. The
+ * capacity is in joules per kilogram of car, which makes it comparable across
+ * the field: a 1.400 kg car hauled from 250 to 100 km/h puts about 2.000 J/kg
+ * into its brakes, so a ventilated set takes three such stops before it
+ * complains and a drum barely one.
+ *
+ * Cooling is a decay constant per second at 108 km/h and scales with speed,
+ * because what cools a brake is air moving past it - which is why the brakes
+ * come back on a long straight and never do round a street circuit. Iron takes
+ * its time: the constants are minute-scale, so a lap sheds a third of what it
+ * put in rather than all of it. */
+const BRAKE_CAPACITY_J_PER_KG: Record<BrakeKind, number> = {
+  "ventilated-disc": 6000,
+  disc: 3500,
+  drum: 1500,
+};
+const BRAKE_COOLING_PER_S: Record<BrakeKind, number> = {
+  "ventilated-disc": 0.006,
+  disc: 0.004,
+  drum: 0.002,
+};
+const BRAKE_COOLING_REFERENCE_MPS = 30;
+/** How much braking is lost per full capacity of overheating, and the floor no
+ * amount of abuse gets under - a faded brake is a bad brake, not no brake. */
+const BRAKE_FADE_SLOPE = 0.5;
+const BRAKE_MAX_FADE = 0.35;
+
+function brakeSpec<T>(car: CarPhysicsInput, table: Record<BrakeKind, T & number>): number {
+  return table[car.brakeFront] * 0.65 + table[car.brakeRear] * 0.35;
+}
+
+/** Heat in the brakes at each point of the run, as a multiple of what they can
+ * take before fading - so 1 is the onset and 2 is twice as much again.
+ *
+ * Energy in wherever the car is slowing, energy out everywhere according to how
+ * fast it is going. Only the speed the brakes actually took out counts; a car
+ * slowing because it ran out of revs is not braking. */
+export function brakeHeatProfile(
+  car: CarPhysicsInput,
+  speeds: readonly number[],
+  stepM: number,
+): number[] {
+  const capacity = brakeSpec(car, BRAKE_CAPACITY_J_PER_KG);
+  const cooling = brakeSpec(car, BRAKE_COOLING_PER_S);
+  const decel = brakingDecelMps2(car);
+  const heats = new Array<number>(Math.max(0, speeds.length - 1));
+  let energy = 0; // J/kg
+  for (let i = 0; i + 1 < speeds.length; i++) {
+    const v = speeds[i];
+    const vNext = speeds[i + 1];
+    const vAvg = Math.max(1, (v + vNext) / 2);
+    const dt = stepM / vAvg;
+    // Everything the car shed over the step, capped at what the brakes could
+    // physically have done in that distance - the rest was drag and gradient.
+    const shed = Math.max(0, (v * v - vNext * vNext) / 2);
+    energy += Math.min(shed, decel * stepM);
+    energy = Math.max(0, energy - energy * cooling * (vAvg / BRAKE_COOLING_REFERENCE_MPS) * dt);
+    heats[i] = energy / capacity;
+  }
+  return heats;
+}
+
+/** What is left of the brakes at a given heat, 1 being cold and unhurt. */
+export function brakeFadeFactor(heat: number): number {
+  if (heat <= 1) return 1;
+  return 1 - Math.min(BRAKE_MAX_FADE, BRAKE_FADE_SLOPE * (heat - 1));
 }
 
 /** Power reaching the road, from the engine's real output.
@@ -382,36 +478,87 @@ export function bankedGripFactor(mu: number, bankingDegrees: number): number {
   return (mu * Math.cos(theta) + Math.sin(theta)) / denominator;
 }
 
-/** Net acceleration at a given speed. `launchLimitN` is the traction ceiling:
+/** Net acceleration at a given speed. `launchGrip` is the tyres' grip:
  * however hard the engine pulls, the tyres decide what reaches the road. */
+/** Height of the centre of gravity, as a share of the roof height.
+ *
+ * The one number here the dataset cannot supply. Where the engine sits would
+ * settle it, and the source carries no such field for any car - not front, mid
+ * or rear, not longitudinal or transverse - so a per-car figure would have to
+ * be invented. A single share of the body height instead: a real car's centre
+ * of gravity sits a little above a third of the way up, and low and tall cars
+ * differ by their roofline, which is measured. */
+const COG_HEIGHT_FACTOR = 0.38;
+
+/** Share of the car's weight sitting on the driven axle at rest.
+ *
+ * Fifty-fifty, for the same reason: the static split follows from where the
+ * engine is, and that is not in the data. What is in the data is the wheelbase
+ * and the height, and those decide the part that actually varies with how hard
+ * the car is accelerating. */
+const STATIC_DRIVEN_SHARE = 0.5;
+
+/** Drive force the tyres can take, at a given grip and against a given
+ * resistance.
+ *
+ * Load moves rearward under acceleration by `m · a · h / L`, so a rear-driven
+ * car presses its driven tyres down as it pulls and a front-driven one unloads
+ * them - which is why a powerful front-driven car cannot use what it has, and
+ * why a long, low car launches better than a short, tall one.
+ *
+ * The transfer depends on the acceleration and the acceleration depends on the
+ * transfer, so it is solved rather than iterated:
+ *
+ *     F = mu · (s · W + sigma · m · a · k),   m · a = F - R
+ *     F = mu · (s · W - sigma · k · R) / (1 - sigma · mu · k)
+ *
+ * with k = h / L and sigma +1 rear-driven, -1 front-driven, 0 for four-wheel
+ * drive, where the transfer moves between driven axles and nets out. */
+export function tractionLimitedDriveN(
+  car: CarPhysicsInput,
+  grip: number,
+  resistanceN: number,
+): number {
+  const weightN = car.weightKg * G;
+  if (car.drivetrain === "AWD") return grip * weightN;
+  const k = (COG_HEIGHT_FACTOR * car.heightMm) / car.wheelbaseMm;
+  const sigma = car.drivetrain === "RWD" ? 1 : -1;
+  // Floored: a rear-driven car on enormous grip would otherwise divide by zero,
+  // which is the wheelie the model has no business simulating.
+  const denominator = Math.max(0.35, 1 - sigma * grip * k);
+  return Math.max(0, (grip * (STATIC_DRIVEN_SHARE * weightN - sigma * k * resistanceN)) / denominator);
+}
+
 function accelerationMps2(
   car: CarPhysicsInput,
   gearbox: Gearbox,
   speedMps: number,
-  launchLimitN: number,
+  launchGrip: number,
   gradientPercent: number,
   powerFactor = 1,
   dragFactor = 1,
 ): number {
-  const driveN = Math.min(launchLimitN, driveForceN(car, gearbox, speedMps) * powerFactor);
   const dragN = dragForceN(car, speedMps) * dragFactor;
   const rollN = ROLLING_RESISTANCE * car.weightKg * G;
   const gradeN = car.weightKg * G * Math.sin(Math.atan(gradientPercent / 100));
-  return (driveN - dragN - rollN - gradeN) / car.weightKg;
+  const resistanceN = dragN + rollN + gradeN;
+  const tractionN = tractionLimitedDriveN(car, launchGrip, resistanceN);
+  const driveN = Math.min(tractionN, driveForceN(car, gearbox, speedMps) * powerFactor);
+  return (driveN - resistanceN) / car.weightKg;
 }
 
 /** Time from rest to 100 km/h on the flat for a given launch limit, including
  * the gearchanges. This is what gets solved against the car's real figure. */
-export function simulate0to100(car: CarPhysicsInput, gearbox: Gearbox, launchLimitN: number): number {
+export function simulate0to100(car: CarPhysicsInput, gearbox: Gearbox, launchGrip: number): number {
   const target = 100 * KPH_TO_MPS;
   const shifts = gearbox.shiftSpeeds;
-  const shiftCost = car.manualGearbox ? SHIFT_TIME_S.manual : SHIFT_TIME_S.automatic;
+  const shiftCost = SHIFT_TIME_S[car.gearboxKind];
   let v = 0;
   let t = 0;
   let nextShift = 0;
 
   while (v < target && t < 120) {
-    const a = accelerationMps2(car, gearbox, v, launchLimitN, 0);
+    const a = accelerationMps2(car, gearbox, v, launchGrip, 0);
     if (a <= 0) return Number.POSITIVE_INFINITY;
     v += a * DT;
     t += DT;
@@ -423,12 +570,16 @@ export function simulate0to100(car: CarPhysicsInput, gearbox: Gearbox, launchLim
   return t;
 }
 
-/** Solves the launch limit so the model reproduces the car's real 0-100 time.
- * Every other number in the model is measured; this one is what the measurement
- * pins down. */
-export function solveLaunchLimitN(car: CarPhysicsInput, gearbox = buildGearbox(car)): number {
-  let low = car.weightKg * 0.5; // ~0.05 g, hopeless
-  let high = car.weightKg * G * 3; // ~3 g, beyond any road tyre
+/** Solves the grip at the driven tyres so the model reproduces the car's real
+ * 0-100 time. Every other number in the model is measured; this one is what the
+ * measurement pins down.
+ *
+ * A coefficient rather than a force, now that load transfer is in the model: the
+ * force a car can put down changes with how hard it is accelerating, so only the
+ * grip behind it is a constant of the car. */
+export function solveLaunchGrip(car: CarPhysicsInput, gearbox = buildGearbox(car)): number {
+  let low = 0.05; // hopeless
+  let high = 3; // beyond any road tyre, even with the transfer helping
   for (let i = 0; i < 60; i++) {
     const mid = (low + high) / 2;
     if (simulate0to100(car, gearbox, mid) > car.accel0to100s) low = mid;
@@ -480,10 +631,10 @@ export interface RunModifiers {
    * being a second car at all, which is why it exists for the race mode and
    * nothing else. */
   dragFactor?: number;
-  /** The solved traction limit, when the caller has it already. Solving is the
+  /** The solved launch grip, when the caller has it already. Solving is the
    * expensive part of a run, and a lap simulated fifty times over does not need
    * it fifty times. */
-  launchLimitN?: number;
+  launchGrip?: number;
 }
 
 export function simulateRun(
@@ -503,67 +654,90 @@ export function simulateRun(
   );
   const grades = gradientProfile(segments, stepM);
   const steps = limits.length;
+  const baseLimits = [...limits];
 
-  // Backward pass: a corner has to be arrived at slowly enough, so its limit
-  // reaches back up the track as far as the brakes need. This is what gives a
-  // car a braking point instead of shedding speed instantly at the corner.
-  const decel = brakingDecelMps2(car) * gripFactor;
-  for (let i = steps - 2; i >= 0; i--) {
-    const reachable = Math.sqrt(limits[i + 1] * limits[i + 1] + 2 * decel * stepM);
-    limits[i] = Math.min(limits[i], reachable);
-  }
-
-  // Forward pass: accelerate as hard as the engine, drag and gradient allow,
-  // never exceeding the limit profile.
   const gearbox = buildGearbox(car);
-  const launchLimitN = (mods.launchLimitN ?? solveLaunchLimitN(car, gearbox)) * gripFactor;
+  const launchGrip = (mods.launchGrip ?? solveLaunchGrip(car, gearbox)) * gripFactor;
   const shifts = gearbox.shiftSpeeds;
-  const shiftCost = car.manualGearbox ? SHIFT_TIME_S.manual : SHIFT_TIME_S.automatic;
-  let nextShift = 0;
+  const shiftCost = SHIFT_TIME_S[car.gearboxKind];
 
   const sampleStepM = totalLengthM / TRACE_SAMPLES;
   const sectorBoundaries = Array.from({ length: SECTOR_COUNT }, (_, i) => ((i + 1) * totalLengthM) / SECTOR_COUNT);
-  const sectorTimesMs: number[] = [];
 
-  let v = 0;
-  let t = 0;
-  let distance = 0;
-  let nextSampleAt = 0;
-  const trace: TracePoint[] = [{ distanceM: 0, timeS: 0, speedKph: 0 }];
-  nextSampleAt += sampleStepM;
-
-  for (let i = 0; i < steps; i++) {
-    const limit = limits[i];
-    if (v > limit) v = limit; // braking already accounted for by the backward pass
-
-    const a = accelerationMps2(car, gearbox, v, launchLimitN, grades[i], powerFactor, dragFactor);
-    const vNext = Math.max(1, Math.min(limit, Math.sqrt(Math.max(0, v * v + 2 * a * stepM))));
-    const vAvg = (v + vNext) / 2;
-    t += stepM / vAvg;
-    v = vNext;
-    distance += stepM;
-
-    while (nextShift < shifts.length && v >= shifts[nextShift]) {
-      t += shiftCost;
-      nextShift++;
+  /** One trip around, with the brakes as good as `decels` says they are at each
+   * point. Returns the speed at every step as well as the result, because how
+   * hard the car braked is what heats the brakes for the next trip. */
+  const lap = (decels: readonly number[]) => {
+    // Backward pass: a corner has to be arrived at slowly enough, so its limit
+    // reaches back up the track as far as the brakes need. This is what gives a
+    // car a braking point instead of shedding speed instantly at the corner.
+    const caps = [...baseLimits];
+    for (let i = steps - 2; i >= 0; i--) {
+      const reachable = Math.sqrt(caps[i + 1] * caps[i + 1] + 2 * decels[i] * stepM);
+      caps[i] = Math.min(caps[i], reachable);
     }
 
-    while (sectorTimesMs.length < SECTOR_COUNT && distance >= sectorBoundaries[sectorTimesMs.length]) {
-      sectorTimesMs.push(Math.round(t * 1000));
+    // Forward pass: accelerate as hard as the engine, drag and gradient allow,
+    // never exceeding the limit profile.
+    const sectorTimesMs: number[] = [];
+    const speeds = new Array<number>(steps + 1);
+    let nextShift = 0;
+    let v = 0;
+    let t = 0;
+    let distance = 0;
+    let nextSampleAt = sampleStepM;
+    const trace: TracePoint[] = [{ distanceM: 0, timeS: 0, speedKph: 0 }];
+
+    for (let i = 0; i < steps; i++) {
+      const limit = caps[i];
+      if (v > limit) v = limit; // braking already accounted for by the backward pass
+      speeds[i] = v;
+
+      const a = accelerationMps2(car, gearbox, v, launchGrip, grades[i], powerFactor, dragFactor);
+      const vNext = Math.max(1, Math.min(limit, Math.sqrt(Math.max(0, v * v + 2 * a * stepM))));
+      const vAvg = (v + vNext) / 2;
+      t += stepM / vAvg;
+      v = vNext;
+      distance += stepM;
+
+      while (nextShift < shifts.length && v >= shifts[nextShift]) {
+        t += shiftCost;
+        nextShift++;
+      }
+
+      while (sectorTimesMs.length < SECTOR_COUNT && distance >= sectorBoundaries[sectorTimesMs.length]) {
+        sectorTimesMs.push(Math.round(t * 1000));
+      }
+      while (distance >= nextSampleAt && trace.length <= TRACE_SAMPLES) {
+        trace.push({ distanceM: distance, timeS: t, speedKph: v / KPH_TO_MPS });
+        nextSampleAt += sampleStepM;
+      }
     }
-    while (distance >= nextSampleAt && trace.length <= TRACE_SAMPLES) {
+    speeds[steps] = v;
+
+    const totalTimeMs = Math.round(t * 1000);
+    while (sectorTimesMs.length < SECTOR_COUNT) sectorTimesMs.push(totalTimeMs);
+    if ((trace[trace.length - 1]?.distanceM ?? 0) < distance) {
       trace.push({ distanceM: distance, timeS: t, speedKph: v / KPH_TO_MPS });
-      nextSampleAt += sampleStepM;
     }
-  }
+    return {
+      result: { totalTimeMs, trace, sectorTimesMs, distanceM: distance, peakBrakeHeat: 0 },
+      speeds,
+    };
+  };
 
-  const totalTimeMs = Math.round(t * 1000);
-  while (sectorTimesMs.length < SECTOR_COUNT) sectorTimesMs.push(totalTimeMs);
-  if ((trace[trace.length - 1]?.distanceM ?? 0) < distance) {
-    trace.push({ distanceM: distance, timeS: t, speedKph: v / KPH_TO_MPS });
-  }
+  const coldDecel = brakingDecelMps2(car) * gripFactor;
+  const first = lap(new Array<number>(steps).fill(coldDecel));
 
-  return { totalTimeMs, trace, sectorTimesMs, distanceM: distance };
+  // Second trip, with the brakes as hot as the first one made them. One
+  // iteration rather than a loop to convergence: fading makes the car brake
+  // earlier and so a little more gently, which cools it - the feedback works
+  // against itself, and a second round moves the lap by well under a
+  // thousandth. A lap that never troubles the brakes skips it entirely.
+  const heat = brakeHeatProfile(car, first.speeds, stepM);
+  const peakBrakeHeat = heat.length ? Math.max(...heat) : 0;
+  if (peakBrakeHeat <= 1) return { ...first.result, peakBrakeHeat };
+  return { ...lap(heat.map((h) => coldDecel * brakeFadeFactor(h))).result, peakBrakeHeat };
 }
 
 /** A run against the speedometer: from one speed to another, and on a standing
@@ -587,8 +761,8 @@ export function simulateSpeedTest(
   const powerFactor = mods.powerFactor ?? 1;
   const dragFactor = mods.dragFactor ?? 1;
   const gearbox = buildGearbox(car);
-  const launchLimitN = mods.launchLimitN ?? solveLaunchLimitN(car, gearbox);
-  const shiftCost = car.manualGearbox ? SHIFT_TIME_S.manual : SHIFT_TIME_S.automatic;
+  const launchGrip = mods.launchGrip ?? solveLaunchGrip(car, gearbox);
+  const shiftCost = SHIFT_TIME_S[car.gearboxKind];
   const from = test.fromKph * KPH_TO_MPS;
   const target = test.toKph * KPH_TO_MPS;
 
@@ -601,7 +775,7 @@ export function simulateSpeedTest(
 
   let stalled = false;
   while (v < target && t < test.timeoutS) {
-    const a = accelerationMps2(car, gearbox, v, launchLimitN, 0, powerFactor, dragFactor);
+    const a = accelerationMps2(car, gearbox, v, launchGrip, 0, powerFactor, dragFactor);
     // Not "a <= 0": as a car nears the speed drag holds it at, the acceleration
     // creeps towards zero and the run would crawl to the timeout a millimetre
     // at a time. Below a fiftieth of a g it is not going to get there.
@@ -631,6 +805,7 @@ export function simulateSpeedTest(
       trace: timedOut,
       sectorTimesMs: Array.from({ length: SECTOR_COUNT }, () => timeoutMs),
       distanceM: distance,
+      peakBrakeHeat: 0,
     };
   }
 
@@ -663,7 +838,7 @@ export function simulateSpeedTest(
     return Math.round(point.timeS * 1000);
   });
 
-  return { totalTimeMs, trace, sectorTimesMs, distanceM: distance };
+  return { totalTimeMs, trace, sectorTimesMs, distanceM: distance, peakBrakeHeat: 0 };
 }
 
 /** What the track's own air does to a car: thinner air is less drag to push

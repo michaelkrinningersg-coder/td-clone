@@ -41,7 +41,7 @@ npx serve out
 [ilyasozkurt/automobile-models-and-specs](https://github.com/ilyasozkurt/automobile-models-and-specs)
 und übernimmt **nur** Autos, bei denen alle benötigten Werte vorhanden sind — Top-Speed,
 0–100 km/h, Leistung, Gewicht, Drehmoment, Antriebsart, Kraftstoffart, cw-Wert, Breite,
-Höhe, Bremsen vorn und hinten, Reifenbreite und Getriebe. Fehlt einer davon, fliegt das
+Höhe, Radstand, Bremsen vorn und hinten, Reifenbreite und Getriebe. Fehlt einer davon, fliegt das
 Auto raus statt geschätzt zu werden. Ergebnis landet in `src/data/cars.json` und ist
 eingecheckt, der Import muss also nicht laufen, um die App zu starten.
 
@@ -55,13 +55,13 @@ unter die kein Getriebe und kein Reifen kommt; ein BMW X1 mit 125 PS und 1.745 k
 liegt darunter. Zusammen fliegen 11 Autos raus, die sich nicht reparieren lassen, ohne
 einen Wert zu erfinden.
 
-Der Trichter von 30.066 Motorvarianten auf 5.461 Autos:
+Der Trichter von 30.066 Motorvarianten auf 5.456 Autos:
 
 | Schritt | bleiben |
 |---|---|
-| vollständige, plausible Daten | 16.932 |
-| Varianten mit identischen Fahrwerten zusammengefasst | 16.812 |
-| je Marke + Modell + Baujahr nur Einstiegs- und Topmotorisierung | 5.461 |
+| vollständige, plausible Daten | 16.859 |
+| Varianten mit identischen Fahrwerten zusammengefasst | 16.741 |
+| je Marke + Modell + Baujahr nur Einstiegs- und Topmotorisierung | 5.456 |
 
 Der letzte Schritt wirft die Zwischenmotorisierungen weg: die Quelle führt jede je
 verkaufte Version, etwa 46 Ausführungen des Volvo S80 von 2009. Gruppiert wird bewusst
@@ -105,8 +105,60 @@ langsamer.
 angegebene Höchstgeschwindigkeit sagt, wie der Hersteller das Auto gezügelt hat, nicht was
 es kann, und geht deshalb nicht ins Modell ein.
 
-**Kalibrierung.** Der einzige gelöste Parameter ist die Traktionsgrenze beim Start: sie
-wird so bestimmt, dass die Simulation die reale 0-100-km/h-Zeit trifft.
+**Schaltzeiten.** Nicht zwei Werte für „Handschaltung oder nicht", sondern der Getriebetyp,
+den die Quelle beim Namen nennt: Doppelkupplung 0,05 s, Wandlerautomatik 0,25 s,
+Handschaltung 0,45 s, automatisiertes Schaltgetriebe (Selespeed, Easytronic) 0,60 s, CVT
+schaltet gar nicht. Im Feld: 3.213 Handschalter, 1.875 Wandler, 358 Doppelkupplungen, 9
+automatisierte, 1 CVT. Was der String nicht festlegt, gilt als Wandlerautomatik — ein
+unqualifiziertes „Automatic" ist fast immer eine. Das benachteiligt die Doppelkupplungen,
+die ein Hersteller schlicht als Automatik verkauft hat (ein BMW M4 GTS steht als „7AT" da
+und ist real ein DKG); sie verlieren eine Zehntelsekunde je Schaltvorgang, die sie nicht
+verlieren sollten.
+
+**Radlastverlagerung.** Unter Beschleunigung wandert Last nach hinten, um `m · a · h / L`.
+Ein heckgetriebenes Auto drückt seine Antriebsreifen dabei auf die Straße, ein
+frontgetriebenes hebt sie an — deshalb kann ein starker Fronttriebler seine Leistung nicht
+loswerden, und deshalb startet ein langes flaches Auto besser als ein kurzes hohes. Radstand
+und Höhe sind gemessen; die Verlagerung hängt von der Beschleunigung ab und die
+Beschleunigung von der Verlagerung, also wird nicht iteriert, sondern aufgelöst:
+
+```
+F = μ · (s · W − σ · k · R) / (1 − σ · μ · k),   k = h / L
+```
+
+σ ist +1 hinten, −1 vorn, 0 bei Allrad, wo sich die Verlagerung zwischen angetriebenen
+Achsen aufhebt.
+
+Zwei Zahlen darin kann der Datensatz **nicht** liefern: die Schwerpunkthöhe und die statische
+Achslastverteilung. Beide folgen aus der Motorlage, und die Quelle führt in 65 Feldern
+keines dazu — nicht vorn/mitte/hinten, nicht längs/quer. Statt sie je Auto zu erfinden steht
+dort je eine benannte Konstante für alle: Schwerpunkt bei 38 % der Dachhöhe, statisch 50/50.
+
+**Kalibrierung.** Der einzige gelöste Parameter ist der Reifengrip beim Start: er wird so
+bestimmt, dass die Simulation die reale 0-100-km/h-Zeit trifft. Seit der Radlastverlagerung
+ist das ein Reibbeiwert statt einer Kraft — und er landet dort, wo ein Straßenreifen lebt:
+Median 1,07 vorn, 1,11 hinten, 0,83 bei Allrad, der am wenigsten Grip braucht, weil alle vier
+Räder ziehen.
+
+**Bremsfading.** Bremsen werden heiß und lassen nach. Energie hinein, wo das Auto verzögert,
+Energie hinaus nach Fahrtwind — deshalb erholen sie sich auf einer langen Geraden und nie auf
+einem Stadtkurs. Kapazität in Joule je Kilogramm Auto, damit sie über das ganze Feld
+vergleichbar ist: belüftete Scheibe 6.000, Scheibe 3.500, Trommel 1.500. Eine harte
+Verzögerung von 250 auf 100 km/h sind rund 2.000 J/kg, eine belüftete Scheibe hält also etwa
+drei davon aus, eine Trommel knapp eine.
+
+Die Runde wird deshalb zweimal gefahren: einmal mit kalten Bremsen, um zu sehen, wie viel
+gebremst wird, und einmal mit den Bremsen so heiß, wie die erste Runde sie gemacht hat. Eine
+Iteration reicht — Fading lässt früher und sanfter bremsen, was kühlt, die Rückkopplung
+arbeitet gegen sich selbst.
+
+Gemessen über 2.400 Läufe: 158 gehen über die Fadinggrenze. Nach Bremsenart sind das 8 % der
+Runden bei belüfteten Scheiben, 19 % bei Scheiben und 75 % bei Trommeln, dort mit Spitzen bei
+2,5-facher Kapazität und dem vollen Abschlag von 35 %. Der Zeitverlust bleibt trotzdem
+bescheiden — im Mittel 0,01 %, im schlimmsten Fall 0,71 % (ein BMW 507 auf Trommeln in Sotschi,
+1,4 s auf 194 s). Das ist ehrlich so: Bremsen kostet nur einen kleinen Teil der Runde, und die
+Autos mit den schwachen Bremsen sind ohnehin die langsamen. Am heißesten wird es in Sotschi,
+Madrid, Baku und Road America; auf den Ovalen und der Kreisbahn wird nie gebremst.
 
 **Bremsen und Kurven.** Verzögerung aus der verbauten Bremse (belüftete Scheibe / Scheibe /
 Trommel, vorn schwerer gewichtet). Kurventempo aus Radius, Reifenbreite je Tonne und

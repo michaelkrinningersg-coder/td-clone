@@ -17,6 +17,8 @@ import {
   gearTopSpeedsMps,
   powerLimitedTopSpeedMps,
   ratedSpeedRadS,
+  shiftTimeS,
+  solveLaunchGrip,
   simulateTrack,
   torqueFactor,
   wheelPowerW,
@@ -27,6 +29,14 @@ const BRAKE_LABEL: Record<string, string> = {
   "ventilated-disc": "Scheibe, belüftet",
   disc: "Scheibe",
   drum: "Trommel",
+};
+
+const GEARBOX_LABEL: Record<string, string> = {
+  manual: "Handschaltung",
+  automatic: "Wandlerautomatik",
+  "dual-clutch": "Doppelkupplung",
+  sequential: "automatisiertes Schaltgetriebe",
+  cvt: "stufenlos",
 };
 
 const CHART_W = 460;
@@ -82,6 +92,8 @@ export function CarDetail({ car }: { car: CarData }) {
   const { isSelected, toggleCar, isFull, isInGarage, toggleGarage } = useSession();
   const cls = carClassOf(car);
   const ratedRpm = Math.round((ratedSpeedRadS(car) * 60) / (2 * Math.PI));
+  const launchGrip = solveLaunchGrip(car);
+  const shiftCostS = shiftTimeS(car);
   const gearSpeeds = gearTopSpeedsMps(car);
   const gearbox = useMemo(() => buildGearbox(car), [car]);
   const topSpeed = Math.round(effectiveTopSpeedMps(car) * 3.6);
@@ -202,13 +214,14 @@ export function CarDetail({ car }: { car: CarData }) {
             <Row label="0–100 km/h" value={`${car.accel0to100s} s`} />
             <Row label="cw-Wert" value={car.dragCoefficient.toFixed(2)} />
             <Row label="Breite × Höhe" value={`${car.widthMm} × ${car.heightMm} mm`} />
+            <Row label="Radstand" value={`${car.wheelbaseMm} mm`} />
             <Row label="Bremse vorn" value={BRAKE_LABEL[car.brakeFront] ?? car.brakeFront} />
             <Row label="Bremse hinten" value={BRAKE_LABEL[car.brakeRear] ?? car.brakeRear} />
             <Row label="Reifenbreite" value={`${car.tyreWidthMm} mm`} />
             <Row
               label="Getriebe"
               value={`${car.gearCount} Gänge`}
-              hint={car.manualGearbox ? "Handschaltung" : "Automatik"}
+              hint={GEARBOX_LABEL[car.gearboxKind] ?? car.gearboxKind}
             />
           </div>
         </section>
@@ -220,6 +233,16 @@ export function CarDetail({ car }: { car: CarData }) {
             <Row label="Stirnfläche" value={`${frontalAreaM2(car).toFixed(2)} m²`} hint="0,85 × Breite × Höhe" />
             <Row label="Leistung am Rad" value={`${Math.round(wheelPowerW(car) / 1000)} kW`} hint="85 % Antriebsstrang" />
             <Row label="Nenndrehzahl" value={`${ratedRpm.toLocaleString("de-DE")} /min`} hint="aus Leistung und Drehmoment" />
+            <Row
+              label="Reifengrip"
+              value={launchGrip.toFixed(2)}
+              hint="auf die reale 0-100-Zeit gelöst"
+            />
+            <Row
+              label="Schaltzeit"
+              value={`${shiftCostS.toFixed(2)} s`}
+              hint={`je Gangwechsel, ${GEARBOX_LABEL[car.gearboxKind] ?? car.gearboxKind}`}
+            />
             <Row
               label="Luftwiderstand bei 100"
               value={`${Math.round(dragForceN(car, 100 / 3.6))} N`}

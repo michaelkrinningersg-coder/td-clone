@@ -15,6 +15,7 @@ import {
   parseBrake,
   parseDragCoefficient,
   parseGearbox,
+  parseGearboxKind,
   parseMillimetres,
   parseTyreWidthMm,
   dedupeVariants,
@@ -46,6 +47,7 @@ const completeEngine: RawEngine = {
       "Aerodynamics (Cd):": "0.34",
       "Width:": "74.4 In (1890 Mm)",
       "Height:": "52.8 In (1341 Mm)",
+      "Wheelbase:": "104.3 In (2650 Mm)",
     },
   },
 };
@@ -72,9 +74,11 @@ describe("convertEngine", () => {
       heightMm: 1341,
       brakeFront: "ventilated-disc",
       brakeRear: "disc",
+      wheelbaseMm: 2650,
       tyreWidthMm: 245,
       gearCount: 6,
       manualGearbox: true,
+      gearboxKind: "manual" as const,
     });
   });
 
@@ -92,6 +96,7 @@ describe("convertEngine", () => {
     ["Dimensions", "Aerodynamics (Cd):"],
     ["Dimensions", "Width:"],
     ["Dimensions", "Height:"],
+    ["Dimensions", "Wheelbase:"],
     ["Brakes Specs", "Front:"],
     ["Brakes Specs", "Rear:"],
     ["Tires Specs", "Tire Size:"],
@@ -273,9 +278,11 @@ describe("dedupeVariants", () => {
     heightMm: 1450,
     brakeFront: "ventilated-disc" as const,
     brakeRear: "disc" as const,
+    wheelbaseMm: 2650,
     tyreWidthMm: 225,
     gearCount: 6,
     manualGearbox: false,
+    gearboxKind: "automatic" as const,
     ...over,
   });
 
@@ -348,9 +355,11 @@ describe("keepBaseAndTopVariants", () => {
     heightMm: 1450,
     brakeFront: "ventilated-disc" as const,
     brakeRear: "disc" as const,
+    wheelbaseMm: 2650,
     tyreWidthMm: 225,
     gearCount: 6,
     manualGearbox: false,
+    gearboxKind: "automatic" as const,
     ...over,
   });
 
@@ -428,6 +437,26 @@ describe("keepBaseAndTopVariants", () => {
   });
 });
 
+describe("parseGearboxKind", () => {
+  it("reads the kinds the source names", () => {
+    assert.equal(parseGearboxKind("6-Speed Manual"), "manual");
+    assert.equal(parseGearboxKind("8-Speed Automatic"), "automatic");
+    assert.equal(parseGearboxKind("7-Speed Dsg"), "dual-clutch");
+    assert.equal(parseGearboxKind("7-Speed Double Clutch Transmission"), "dual-clutch");
+    assert.equal(parseGearboxKind("Amg Speedshift Mct 7 Speed"), "dual-clutch");
+    assert.equal(parseGearboxKind("6-Speed Automatic (Selespeed)"), "sequential");
+    assert.equal(parseGearboxKind("9- Speed Hydra-Matic"), "automatic");
+    assert.equal(parseGearboxKind("Cvt"), "cvt");
+  });
+
+  // An unqualified "Automatic" is a torque converter far more often than not,
+  // and a string that says nothing at all is likelier one than a manual.
+  it("falls back to a torque converter rather than guessing a fast box", () => {
+    assert.equal(parseGearboxKind(""), "automatic");
+    assert.equal(parseGearboxKind("5 Speed"), "automatic");
+  });
+});
+
 describe("isPlausible", () => {
   const base: ImportedCar = {
     make: "Audi",
@@ -446,9 +475,11 @@ describe("isPlausible", () => {
     heightMm: 1450,
     brakeFront: "ventilated-disc" as const,
     brakeRear: "disc" as const,
+    wheelbaseMm: 2650,
     tyreWidthMm: 225,
     gearCount: 6,
     manualGearbox: false,
+    gearboxKind: "automatic" as const,
   };
 
   it("accepts a normal car", () => {
@@ -569,9 +600,17 @@ describe("parseTyreWidthMm", () => {
 
 describe("parseGearbox", () => {
   it("reads the gear count and whether it is manual", () => {
-    assert.deepEqual(parseGearbox("6-Speed Manual"), { gearCount: 6, manual: true });
-    assert.deepEqual(parseGearbox("8-Speed Automatic"), { gearCount: 8, manual: false });
-    assert.deepEqual(parseGearbox("7 Speed Dual Clutch"), { gearCount: 7, manual: false });
+    assert.deepEqual(parseGearbox("6-Speed Manual"), { gearCount: 6, manual: true, kind: "manual" });
+    assert.deepEqual(parseGearbox("8-Speed Automatic"), {
+      gearCount: 8,
+      manual: false,
+      kind: "automatic",
+    });
+    assert.deepEqual(parseGearbox("7 Speed Dual Clutch"), {
+      gearCount: 7,
+      manual: false,
+      kind: "dual-clutch",
+    });
   });
 
   it("returns null without a gear count", () => {
