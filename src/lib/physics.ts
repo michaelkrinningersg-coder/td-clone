@@ -303,9 +303,10 @@ function accelerationMps2(
   launchLimitN: number,
   gradientPercent: number,
   powerFactor = 1,
+  dragFactor = 1,
 ): number {
   const driveN = Math.min(launchLimitN, driveForceN(car, gearbox, speedMps) * powerFactor);
-  const dragN = dragForceN(car, speedMps);
+  const dragN = dragForceN(car, speedMps) * dragFactor;
   const rollN = ROLLING_RESISTANCE * car.weightKg * G;
   const gradeN = car.weightKg * G * Math.sin(Math.atan(gradientPercent / 100));
   return (driveN - dragN - rollN - gradeN) / car.weightKg;
@@ -383,6 +384,11 @@ export interface RunModifiers {
   /** Share of the tyres' grip, 1 being fresh. Cornering speed goes with its
    * square root, braking and traction with the factor itself. */
   gripFactor?: number;
+  /** Share of the car's own drag it is pushing. Below one for a car tucked into
+   * the wake of another - the only thing in the model that depends on there
+   * being a second car at all, which is why it exists for the race mode and
+   * nothing else. */
+  dragFactor?: number;
   /** The solved traction limit, when the caller has it already. Solving is the
    * expensive part of a run, and a lap simulated fifty times over does not need
    * it fifty times. */
@@ -396,6 +402,7 @@ export function simulateRun(
 ): SimResult {
   const powerFactor = mods.powerFactor ?? 1;
   const gripFactor = mods.gripFactor ?? 1;
+  const dragFactor = mods.dragFactor ?? 1;
   const totalLengthM = segments.reduce((sum, s) => sum + s.lengthM, 0);
   const stepM = Math.max(1, Math.min(5, totalLengthM / 4000));
   const limits = speedLimitProfile(car, segments, stepM).map((cap) =>
@@ -438,7 +445,7 @@ export function simulateRun(
     const limit = limits[i];
     if (v > limit) v = limit; // braking already accounted for by the backward pass
 
-    const a = accelerationMps2(car, gearbox, v, launchLimitN, grades[i], powerFactor);
+    const a = accelerationMps2(car, gearbox, v, launchLimitN, grades[i], powerFactor, dragFactor);
     const vNext = Math.max(1, Math.min(limit, Math.sqrt(Math.max(0, v * v + 2 * a * stepM))));
     const vAvg = (v + vNext) / 2;
     t += stepM / vAvg;

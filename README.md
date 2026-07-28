@@ -169,32 +169,67 @@ Runden gerundet — 36 Runden Spa, 76 Runden Monaco, 199 Runden Kreisbahn. Bis z
 wahlweise höchstens zwei je Marke, gezogen aus dem, was die Autofilter übrig lassen. Nur
 geschlossene Runden stehen zur Wahl: ein Bergrennen und ein stehender Kilometer haben keine.
 
-Dieser Modus ist der einzige mit Zufall, und er ist bewusst vom Rundenzeitmodell getrennt:
+Dieser Modus ist der einzige mit Zufall und der einzige, in dem sich die Autos gegenseitig
+sehen. Er ist bewusst vom Rundenzeitmodell getrennt — `src/lib/lap-race.ts` rechnet das
+Rennen, `physics.ts` weiß davon nichts.
 
-**Reifen.** Ein Satz hält **60–85 % des Rennens** — wie viel genau, entscheidet das Auto
+**Das Feld fährt gemeinsam.** Runde für Runde: erst die eigene Zeit jedes Autos, dann die
+Reihenfolge nach der Uhr, dann von vorn nach hinten die Frage, ob jeder am Vordermann
+vorbeikommt. Nur so kann ein Auto aufgehalten werden.
+
+**Qualifying.** Eine Runde je Auto, jeder 0–3 % über seiner Bestzeit — deshalb ist die
+Startaufstellung nicht einfach die Rangliste. Jeder Startplatz weiter hinten kostet 0,4 s,
+bevor ein Rad sich dreht.
+
+**Reifen.** Ein Satz hält **60–85 % des Rennens**; wie viel, entscheidet zu 70 % das Auto
 (Gewicht je Millimeter Reifenbreite) und zu 30 % die Strecke (Kurvenanteil). Der Satz ist neu
 1,5 % unter seinem Optimum, hat es nach **15 % seiner Lebensdauer** erreicht und baut danach
-**quadratisch** ab: die erste Stinthälfte kostet fast nichts, die letzten Runden das meiste.
-Am Ende der Lebensdauer fehlen 18 % Grip.
+**quadratisch** ab — die erste Stinthälfte kostet fast nichts, die letzten Runden das meiste.
+**Vorder- und Hinterachse verschleißen getrennt**: ein Fronttriebler frisst die Vorderreifen
+(Faktor 1,35 zu 0,75), ein Hecktriebler die hinteren, Allrad verteilt es und kommt am
+weitesten. Gewechselt wird immer komplett, also begrenzt die schlechtere Achse den Stint.
 
 **Boxenstopps.** Kein Satz überlebt das Rennen, also stoppt jedes Auto — **immer ein- oder
 zweimal, nie öfter**. Welche der beiden Strategien, rechnet die Box je Auto selbst aus: sie
-vergleicht die Rundenverluste durch abbauende Reifen mit den 25 Sekunden Boxenzeit und nimmt
-die billigere. Der Stopp fällt dann **±4 Runden** um den errechneten Zeitpunkt, damit nicht
-das ganze Feld in derselben Runde hereinkommt. Ein Test rechnet beide Strategien für 20 echte
-Autos nach und prüft, dass die gewählte tatsächlich die schnellere war.
+vergleicht die Rundenverluste durch abbauende Reifen mit 25 s Boxenzeit plus der langsamen
+Out-Lap und nimmt die billigere. Der Stopp fällt **±4 Runden** um den errechneten Zeitpunkt,
+verschoben um die **Risikobereitschaft** des Autos (bis zu 3 Runden früher oder später). In
+4 % der Fälle geht der Stopp schief und kostet 3–8 s extra. Ein Test rechnet beide Strategien
+für echte Autos komplett nach und prüft, dass die gewählte tatsächlich die schnellere war.
 
-**Zufall.** Je Runde 0–2 % weniger Leistung, dazu eine Tagesform von 0–2 % für das ganze
-Rennen. Fahrfehler kosten für eine Runde 10 % Grip; sie sind auf kurvenreichen Strecken und
+**Die Runde selbst.** Erste Runde 2 % langsamer (alles kalt), Out-Lap 1,5 % langsamer, und
+über das Rennen wird der Kurs 1,5 % schneller, weil Gummi liegen bleibt.
+
+**Windschatten und Verkehr.** Innerhalb von 1,5 s hinter dem Vordermann fährt ein Auto in
+dessen Loch: 25 % weniger Luftwiderstand, gewichtet mit dem Geradenanteil der Strecke — dafür
+5 % weniger Grip in den Kurven. Vorbei kommt es nur mit einem **Tempoüberschuss über der
+Schwelle der Strecke**, und die folgt der Geometrie: `0,4 % ÷ (längste Gerade / 800 m)`. Monza
+verlangt 0,33 %, Monaco 1,64 %. Die nötige Marge wird jede Runde neu gewürfelt (60–140 % der
+Schwelle), sonst wäre es Mechanik statt Rennen. Wer nicht vorbeikommt, hängt fest: er kann die
+Runde nicht vor dem beenden, den er nicht überholt hat.
+
+**Safety Car.** 0,8 % aller Fahrfehler enden in der Mauer. Dann drei Runden hinter dem Safety
+Car im gleichen Tempo für alle, ein Stopp kostet dort nur die Hälfte, und am Ende steht das
+Feld wieder bumper an bumper — alles, was jemand herausgefahren hatte, ist weg.
+
+**Fahrfehler und Form.** Je Runde 0–2 % weniger Leistung, dazu eine Tagesform von 0–2 % fürs
+ganze Rennen. Fehler kosten für eine Runde 10 % Grip; sie sind auf kurvenreichen Strecken und
 mit schwächeren Bremsen wahrscheinlicher.
 
-Wie viel ein Auto durch Grip- oder Leistungsverlust verliert, ist nicht geraten: für jedes
-Auto laufen drei Runden — sauber, 10 % weniger Grip, 10 % weniger Leistung — und dazwischen
-wird linear gelesen. Ein Bugatti verliert fast nichts durch fehlende Leistung und viel durch
-fehlenden Grip, ein Dacia genau umgekehrt.
+Wie viel ein Auto durch Grip-, Leistungs- oder Luftwiderstandsverlust verliert, ist nicht
+geraten: für jedes Auto laufen vier Runden — sauber, 10 % weniger Grip, 10 % weniger Leistung,
+25 % weniger Luftwiderstand — und dazwischen wird linear gelesen. Ein Bugatti verliert fast
+nichts durch fehlende Leistung und viel durch fehlenden Grip, ein Dacia genau umgekehrt, und
+ein Kastenwagen gewinnt im Windschatten mehr als ein Flunder.
+
+Was daraus wird, ist streckenabhängig: In Monza hängt ein Auto in 29 % der Runden fest und die
+Startaufstellung hält weitgehend; in Monaco sind es über 40 %, und dort kommt ein Auto auch mal
+von Platz 11 auf Platz 4 — oder verliert von Platz 3 aus fünfzehn Ränge.
 
 Rennergebnisse gehen **nicht** in die Ranglisten. Die versprechen eine saubere, wiederholbare
-Runde; ein Rennen hat Glück darin.
+Runde; ein Rennen hat Glück und Verkehr darin. Zwei Tests halten das fest: keine Datei des
+Rennmodus darf den Zeitspeicher auch nur erwähnen, und `physics.ts` darf nichts von Reifen,
+Safety Car oder Zufall wissen.
 
 ## Tests
 

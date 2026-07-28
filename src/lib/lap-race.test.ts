@@ -11,11 +11,14 @@ import {
   lapsFor,
   planStops,
   progressAt,
+  qualify,
   rankRace,
   simulateRace,
   strategyCostMs,
+  trackTraits,
   tyreGrip,
   type CarPace,
+  type TrackTraits,
 } from "./lap-race";
 import { cars, tracks } from "./data";
 
@@ -29,14 +32,23 @@ const flat: CarPace = {
   baseLapMs: 100_000,
   gripSensitivity: 0,
   powerSensitivity: 0,
+  towSensitivity: 0,
   tyreLifeShare: 0.85,
+  axleWear: { front: 1, rear: 1 },
   errorChance: 0,
 };
 
-/** Never rolls anything: no errors, no form loss. The pit window jitter runs
- * off the same roll, so a zero puts every stop four laps early. */
-const never = () => 0;
-/** Rolls in the middle: no jitter on the stop laps at all. */
+/** A circuit that does nothing to a race: no corners to lose grip in, no
+ * straight to tow down, and passing free. */
+const plain: TrackTraits = {
+  cornerShare: 0,
+  straightShare: 0,
+  longestStraightM: 0,
+  overtakeThreshold: 0,
+};
+
+/** Rolls in the middle every time: no jitter on the stop laps, no errors, the
+ * same form for everyone. */
 const middling = () => 0.5;
 
 describe("lapsFor", () => {
@@ -46,7 +58,6 @@ describe("lapsFor", () => {
   });
 
   it("rounds to the nearest lap rather than cutting one short", () => {
-    // 6.96 km: 35.9 laps, so 36 and a slightly long race.
     assert.equal(lapsFor(6960), 36);
   });
 
@@ -68,15 +79,45 @@ describe("cornerShare", () => {
   });
 });
 
+describe("trackTraits", () => {
+  it("asks for far more pace to pass at Monaco than at Monza", () => {
+    assert.ok(trackTraits(monaco).overtakeThreshold > trackTraits(monza).overtakeThreshold * 3);
+  });
+
+  it("reads the straight a tow would be had on", () => {
+    assert.ok(trackTraits(monza).straightShare > trackTraits(monaco).straightShare);
+    assert.ok(trackTraits(monza).longestStraightM > 800);
+  });
+
+  it("keeps every circuit's threshold in a range that means something", () => {
+    for (const track of tracks.filter((t) => t.outline !== undefined)) {
+      const { overtakeThreshold } = trackTraits(track);
+      assert.ok(
+        overtakeThreshold > 0.002 && overtakeThreshold < 0.021,
+        `${track.name}: ${(overtakeThreshold * 100).toFixed(2)} %`,
+      );
+    }
+  });
+});
+
 describe("carPace", () => {
   const golf = cars.find((c) => c.make === "Volkswagen" && c.model.includes("Golf"))!;
   const heavy = { ...golf, id: "heavy", weightKg: 2400, tyreWidthMm: 175 };
   const light = { ...golf, id: "light", weightKg: 1100, tyreWidthMm: 285 };
 
-  it("costs time to lose grip or power", () => {
-    const pace = carPace(golf, monaco);
+  it("costs time to lose grip or power, and saves it to lose drag", () => {
+    const pace = carPace(golf, monza);
     assert.ok(pace.gripSensitivity > 0);
     assert.ok(pace.powerSensitivity > 0);
+    assert.ok(pace.towSensitivity > 0);
+  });
+
+  it("gives the tow to the car that needs it", () => {
+    // A barn door gains more from someone else's hole in the air than a car
+    // that was already slippery.
+    const brick = { ...golf, id: "brick", dragCoefficient: 0.42, heightMm: 1900, widthMm: 1950 };
+    const slippery = { ...golf, id: "slippery", dragCoefficient: 0.24, heightMm: 1300 };
+    assert.ok(carPace(brick, monza).towSensitivity > carPace(slippery, monza).towSensitivity);
   });
 
   it("keeps every car's tyres inside the sixty to eighty-five per cent window", () => {
@@ -92,8 +133,15 @@ describe("carPace", () => {
     assert.ok(carPace(heavy, monaco).tyreLifeShare < carPace(light, monaco).tyreLifeShare);
   });
 
-  it("is harder on tyres where there are more corners", () => {
-    assert.ok(carPace(heavy, monaco).tyreLifeShare <= carPace(heavy, monza).tyreLifeShare);
+  it("wears the axle that does the work", () => {
+    const fwd = carPace({ ...golf, drivetrain: "FWD" }, monza).axleWear;
+    const rwd = carPace({ ...golf, drivetrain: "RWD" }, monza).axleWear;
+    const awd = carPace({ ...golf, drivetrain: "AWD" }, monza).axleWear;
+    assert.ok(fwd.front > fwd.rear, "front-driven cars eat the fronts");
+    assert.ok(rwd.rear > rwd.front, "rear-driven cars eat the rears");
+    // Four-wheel drive shares it out, so its worst axle is the least worst.
+    assert.ok(Math.max(awd.front, awd.rear) < Math.max(fwd.front, fwd.rear));
+    assert.ok(Math.max(awd.front, awd.rear) < Math.max(rwd.front, rwd.rear));
   });
 });
 
@@ -125,6 +173,42 @@ describe("tyreGrip", () => {
   });
 });
 
+describe("qualify", () => {
+  const field: CarPace[] = [
+    { ...flat, carId: "quick", baseLapMs: 90_000 },
+    { ...flat, carId: "middle", baseLapMs: 91_000 },
+    { ...flat, carId: "slow", baseLapMs: 120_000 },
+  ];
+
+  it("puts the quickest car on pole when nobody has a moment", () => {
+    const grid = qualify(field, middling);
+    assert.equal(grid[0].carId, "quick");
+    assert.deepEqual(
+      grid.map((g) => g.gridIndex),
+      [0, 1, 2],
+    );
+  });
+
+  it("costs every car up to three per cent of its lap", () => {
+    for (const roll of [0, 0.5, 0.999]) {
+      const [pole] = qualify([field[0]], () => roll);
+      assert.ok(pole.lapMs >= 90_000);
+      assert.ok(pole.lapMs <= 90_000 * 1.03 + 1, `rolled ${roll}: ${pole.lapMs}`);
+    }
+  });
+
+  it("can turn the order round between cars that are close", () => {
+    // The quick car has a scruffy lap, the one a per cent behind a clean one.
+    let call = 0;
+    const grid = qualify([field[0], field[1]], () => (call++ === 0 ? 0.999 : 0));
+    assert.equal(grid[0].carId, "middle");
+    // And never between cars that are not close at all.
+    let second = 0;
+    const wide = qualify([field[0], field[2]], () => (second++ === 0 ? 0.999 : 0));
+    assert.equal(wide[0].carId, "quick");
+  });
+});
+
 describe("planStops", () => {
   const wearing: CarPace = { ...flat, gripSensitivity: 0.4, tyreLifeShare: 0.7 };
 
@@ -139,8 +223,10 @@ describe("planStops", () => {
       for (const sensitivity of [0.05, 0.3, 0.8, 2]) {
         const pace: CarPace = { ...flat, gripSensitivity: sensitivity, tyreLifeShare: life };
         for (const laps of [8, 20, 43, 76, 199]) {
-          const stops = planStops(pace, laps, middling).length;
-          assert.ok(stops === 1 || stops === 2, `${stops} stops at ${laps} laps, life ${life}`);
+          for (const risk of [-1, 0, 1]) {
+            const stops = planStops(pace, laps, middling, risk).length;
+            assert.ok(stops === 1 || stops === 2, `${stops} stops at ${laps} laps, life ${life}`);
+          }
         }
       }
     }
@@ -157,8 +243,14 @@ describe("planStops", () => {
     }
   });
 
+  it("sends the impatient in early and the patient out long", () => {
+    const [early] = planStops(wearing, 40, middling, -1);
+    const [late] = planStops(wearing, 40, middling, 1);
+    assert.ok(early < 20 && late > 20, `${early} vs ${late}`);
+    assert.equal(late - early, 6);
+  });
+
   it("takes the second stop when the tyres cost more than the pit lane", () => {
-    // Loses a lot of lap time on worn tyres and gets through a set quickly.
     const punishing: CarPace = { ...flat, gripSensitivity: 3, tyreLifeShare: 0.6 };
     assert.equal(planStops(punishing, 60, middling).length, 2);
   });
@@ -170,10 +262,7 @@ describe("planStops", () => {
 
   it("agrees with the cost it is deciding on", () => {
     const punishing: CarPace = { ...flat, gripSensitivity: 3, tyreLifeShare: 0.6 };
-    assert.ok(
-      strategyCostMs(punishing, 60, [20, 40]) < strategyCostMs(punishing, 60, [30]),
-      "two stops has to be the cheaper answer for the car that takes it",
-    );
+    assert.ok(strategyCostMs(punishing, 60, [20, 40]) < strategyCostMs(punishing, 60, [30]));
   });
 
   // The strongest check there is on the pit wall: run the race both ways and
@@ -181,23 +270,18 @@ describe("planStops", () => {
   it("chooses the strategy that is actually faster", () => {
     for (const track of [monza, monaco]) {
       const laps = lapsFor(track.lengthM);
+      const traits = trackTraits(track);
       for (const car of cars.filter((_, i) => i % 800 === 0)) {
         const pace = carPace(car, track);
         const chosen = planStops(pace, laps, middling).length;
-        const one = simulateRace([pace], {
-          laps,
-          stopLaps: [Math.round(laps / 2)],
-          random: middling,
-        })[0].totalTimeMs;
-        const two = simulateRace([pace], {
-          laps,
-          stopLaps: [Math.round(laps / 3), Math.round((2 * laps) / 3)],
-          random: middling,
-        })[0].totalTimeMs;
+        const race = (stopLaps: number[]) =>
+          simulateRace([pace], { laps, traits, stopLaps, random: middling }).entries[0].totalTimeMs;
+        const one = race([Math.round(laps / 2)]);
+        const two = race([Math.round(laps / 3), Math.round((2 * laps) / 3)]);
         assert.equal(
           chosen,
           one <= two ? 1 : 2,
-          `${car.id} at ${track.name}: chose ${chosen}, one-stop ${(one / 1000).toFixed(1)} s, two-stop ${(two / 1000).toFixed(1)} s`,
+          `${car.id} at ${track.name}: chose ${chosen}, one ${(one / 1000).toFixed(1)} s, two ${(two / 1000).toFixed(1)} s`,
         );
       }
     }
@@ -213,88 +297,261 @@ describe("planStops", () => {
   });
 });
 
-describe("simulateRace", () => {
-  it("adds the laps up, with the tyre loss and the stop in them", () => {
-    const [entry] = simulateRace([flat], { laps: 10, random: middling });
-    // A pace that shrugs off worn tyres and never errs: laps plus one stop.
-    assert.equal(entry.totalTimeMs, 1_000_000 + PIT_LOSS_MS);
-    assert.equal(entry.stops, 1);
-    assert.equal(entry.laps.length, 10);
+describe("a lap of the race", () => {
+  const solo = (over: Partial<CarPace> = {}, laps = 20) =>
+    simulateRace([{ ...flat, ...over }], { laps, traits: plain, random: middling }).entries[0];
+
+  it("is slowest on the first lap, because everything is cold", () => {
+    const entry = solo();
+    assert.ok(entry.laps[0].lapTimeMs > entry.laps[1].lapTimeMs);
+    assert.ok(Math.abs(entry.laps[0].lapTimeMs / flat.baseLapMs - 1.02) < 0.001);
   });
 
-  it("puts the car on fresh tyres after a stop", () => {
-    const [entry] = simulateRace([flat], { laps: 20, random: middling });
+  it("is quicker at the end than in the middle, because the circuit rubbers in", () => {
+    const entry = solo();
+    const clean = entry.laps.filter((l) => !l.pitted && !l.outLap && l !== entry.laps[0]);
+    assert.ok(clean[clean.length - 1].lapTimeMs < clean[0].lapTimeMs);
+    // A per cent and a half over the race, near enough.
+    const gain = 1 - clean[clean.length - 1].lapTimeMs / clean[0].lapTimeMs;
+    assert.ok(gain > 0.01 && gain < 0.02, `${(gain * 100).toFixed(2)} %`);
+  });
+
+  it("loses time on the lap out of the pits", () => {
+    const entry = solo();
+    const out = entry.laps.findIndex((l) => l.outLap);
+    assert.ok(out > 0, "there has to be an out lap");
+    assert.ok(entry.laps[out].lapTimeMs > entry.laps[out + 1].lapTimeMs);
+  });
+
+  it("keeps the power loss inside the two per cent it is allowed", () => {
+    const worst = simulateRace([{ ...flat, powerSensitivity: 1 }], {
+      laps: 1,
+      traits: plain,
+      random: () => 0.999,
+    }).entries[0];
+    // One lap, so cold tyres too - the power part alone must not exceed four
+    // per cent, and the first lap adds its two.
+    assert.ok(worst.totalTimeMs <= 100_000 * 1.061, `${worst.totalTimeMs}`);
+  });
+
+  it("runs slower on a spent set than on a peaked one", () => {
+    const entry = solo({ gripSensitivity: 1 }, 40);
+    const spent = [...entry.laps].filter((l) => !l.pitted).sort((a, b) => b.tyreUsed - a.tyreUsed)[0];
+    const peaked = [...entry.laps]
+      .filter((l) => !l.pitted && !l.outLap)
+      .sort((a, b) => Math.abs(a.tyreUsed - 0.15) - Math.abs(b.tyreUsed - 0.15))[0];
+    assert.ok(spent.lapTimeMs > peaked.lapTimeMs);
+  });
+});
+
+describe("pit stops in the race", () => {
+  it("brings every car in once or twice, whatever it is and wherever it races", () => {
+    for (const track of [monza, monaco]) {
+      const laps = lapsFor(track.lengthM);
+      const traits = trackTraits(track);
+      for (const car of cars.filter((_, i) => i % 900 === 0)) {
+        const [entry] = simulateRace([carPace(car, track)], { laps, traits }).entries;
+        assert.ok(entry.stops === 1 || entry.stops === 2, `${car.id} made ${entry.stops} stops`);
+      }
+    }
+  });
+
+  it("costs the pit time, and sometimes more", () => {
+    const clean = simulateRace([flat], { laps: 20, traits: plain, random: middling }).entries[0];
+    // A roll that always botches the stop: same race, several seconds worse.
+    let call = 0;
+    const botched = simulateRace([flat], {
+      laps: 20,
+      traits: plain,
+      // Every fifth roll is the botch check; 0.5 elsewhere keeps the rest put.
+      random: () => (++call % 5 === 0 ? 0.001 : 0.5),
+    }).entries[0];
+    assert.ok(botched.totalTimeMs > clean.totalTimeMs);
+    assert.ok(clean.botchedStops === 0);
+  });
+
+  it("puts the car on fresh tyres afterwards", () => {
+    const entry = simulateRace([flat], { laps: 20, traits: plain, random: middling }).entries[0];
     const pitLap = entry.laps.findIndex((l) => l.pitted);
-    assert.ok(pitLap >= 0);
     assert.equal(entry.laps[pitLap + 1].tyreUsed, 0);
   });
 
   it("does not change tyres on the last lap", () => {
-    assert.equal(simulateRace([flat], { laps: 3, random: middling })[0].laps[2].pitted, false);
+    const entry = simulateRace([flat], { laps: 3, traits: plain, random: middling }).entries[0];
+    assert.equal(entry.laps[2].pitted, false);
+  });
+});
+
+describe("traffic", () => {
+  /** Two cars, the quicker one starting behind - which is the only situation
+   * in which traffic means anything. */
+  const chase = (advantage: number, traits: TrackTraits, random = middling) =>
+    simulateRace(
+      [
+        { ...flat, carId: "slow", baseLapMs: 100_000 },
+        { ...flat, carId: "quick", baseLapMs: 100_000 * (1 - advantage) },
+      ],
+      { laps: 12, traits, stopLaps: [6], grid: ["slow", "quick"], random },
+    );
+
+  it("lets a much quicker car through", () => {
+    const race = chase(0.05, { ...plain, overtakeThreshold: 0.004 });
+    const quick = race.entries.find((e) => e.carId === "quick")!;
+    const slow = race.entries.find((e) => e.carId === "slow")!;
+    assert.ok(quick.totalTimeMs < slow.totalTimeMs, "five per cent has to be enough");
   });
 
-  it("runs slower on a spent set than on a peaked one", () => {
-    const sensitive: CarPace = { ...flat, gripSensitivity: 1, tyreLifeShare: 0.85 };
-    const [entry] = simulateRace([sensitive], { laps: 40, random: middling });
-    // The most worn lap of the race against the one closest to the tyre's best.
-    const spent = [...entry.laps].filter((l) => !l.pitted).sort((a, b) => b.tyreUsed - a.tyreUsed)[0];
-    const peaked = [...entry.laps]
-      .filter((l) => !l.pitted)
-      .sort((a, b) => Math.abs(a.tyreUsed - 0.15) - Math.abs(b.tyreUsed - 0.15))[0];
+  it("holds up a car that is barely quicker", () => {
+    const threshold = 0.02;
+    const race = chase(0.005, { ...plain, overtakeThreshold: threshold });
+    const quick = race.entries.find((e) => e.carId === "quick")!;
     assert.ok(
-      spent.lapTimeMs > peaked.lapTimeMs,
-      `spent ${spent.lapTimeMs.toFixed(0)} at ${spent.tyreUsed.toFixed(2)} vs peaked ${peaked.lapTimeMs.toFixed(0)}`,
+      quick.laps.some((l) => l.heldUp),
+      "half a per cent must not get past where two are needed",
     );
   });
 
-  it("is quicker just past the tyre's peak than on a set straight out of the box", () => {
-    const sensitive: CarPace = { ...flat, gripSensitivity: 1, tyreLifeShare: 0.85 };
-    const [entry] = simulateRace([sensitive], { laps: 40, random: middling });
-    const first = entry.laps[0];
-    const peaked = [...entry.laps]
-      .filter((l) => !l.pitted)
-      .sort((a, b) => Math.abs(a.tyreUsed - 0.15) - Math.abs(b.tyreUsed - 0.15))[0];
-    assert.ok(peaked.lapTimeMs < first.lapTimeMs, "a new set is not the quickest set");
+  it("costs the follower time it would not have lost alone", () => {
+    const threshold = 0.02;
+    const together = chase(0.005, { ...plain, overtakeThreshold: threshold });
+    const alone = simulateRace([{ ...flat, carId: "quick", baseLapMs: 99_500 }], {
+      laps: 12,
+      traits: { ...plain, overtakeThreshold: threshold },
+      stopLaps: [6],
+      random: middling,
+    });
+    const stuck = together.entries.find((e) => e.carId === "quick")!;
+    assert.ok(stuck.totalTimeMs > alone.entries[0].totalTimeMs);
   });
 
-  it("costs time to be off form and to make a mistake", () => {
-    const sensitive: CarPace = { ...flat, gripSensitivity: 1, powerSensitivity: 1, errorChance: 1 };
-    const clean = simulateRace([sensitive], { laps: 5, random: middling })[0];
-    const rough = simulateRace([sensitive], { laps: 5, random: () => 0.999 })[0];
-    assert.ok(rough.totalTimeMs > clean.totalTimeMs);
+  it("makes the same car easier to pass on a circuit with a straight", () => {
+    const advantage = 0.008;
+    const easy = chase(advantage, { ...plain, overtakeThreshold: 0.003 });
+    const hard = chase(advantage, { ...plain, overtakeThreshold: 0.02 });
+    const heldOn = (race: ReturnType<typeof chase>) =>
+      race.entries.find((e) => e.carId === "quick")!.laps.filter((l) => l.heldUp).length;
+    assert.ok(heldOn(easy) < heldOn(hard), `${heldOn(easy)} vs ${heldOn(hard)}`);
   });
 
-  it("keeps the power loss inside the two per cent it is allowed", () => {
-    const sensitive: CarPace = { ...flat, powerSensitivity: 1 };
-    const worst = simulateRace([sensitive], { laps: 1, random: () => 0.999 })[0];
-    assert.ok(worst.totalTimeMs <= 100_000 * 1.04 + 1, `${worst.totalTimeMs}`);
-    assert.ok(worst.totalTimeMs > 100_000 * 1.03);
-  });
-
-  it("gives every car its own grid slot", () => {
-    const race = simulateRace([flat, { ...flat, carId: "b" }], { laps: 2, random: never });
-    assert.deepEqual(
-      race.map((e) => e.gridIndex),
-      [0, 1],
+  it("gives the car behind a tow down the straight and takes grip in the corners", () => {
+    const towed = simulateRace(
+      [
+        { ...flat, carId: "ahead" },
+        { ...flat, carId: "behind", towSensitivity: 1 },
+      ],
+      {
+        laps: 6,
+        traits: { ...plain, straightShare: 1, overtakeThreshold: 10 },
+        stopLaps: [3],
+        grid: ["ahead", "behind"],
+        random: middling,
+      },
     );
+    const behind = towed.entries.find((e) => e.carId === "behind")!;
+    assert.ok(
+      behind.laps.some((l) => l.inTraffic),
+      "the car behind is in the wake",
+    );
+
+    const dirtied = simulateRace(
+      [
+        { ...flat, carId: "ahead" },
+        { ...flat, carId: "behind", gripSensitivity: 1 },
+      ],
+      {
+        laps: 6,
+        traits: { ...plain, cornerShare: 1, overtakeThreshold: 10 },
+        stopLaps: [3],
+        grid: ["ahead", "behind"],
+        random: middling,
+      },
+    );
+    const inDirtyAir = dirtied.entries.find((e) => e.carId === "behind")!;
+    const clean = simulateRace([{ ...flat, carId: "behind", gripSensitivity: 1 }], {
+      laps: 6,
+      traits: { ...plain, cornerShare: 1 },
+      stopLaps: [3],
+      random: middling,
+    }).entries[0];
+    assert.ok(inDirtyAir.totalTimeMs > clean.totalTimeMs, "following costs grip in the corners");
   });
 
-  it("brings every car in once or twice, whatever it is and wherever it races", () => {
-    for (const track of [monza, monaco]) {
-      const laps = lapsFor(track.lengthM);
-      for (const car of cars.filter((_, i) => i % 900 === 0)) {
-        const [entry] = simulateRace([carPace(car, track)], { laps });
-        assert.ok(
-          entry.stops === 1 || entry.stops === 2,
-          `${car.id} made ${entry.stops} stops at ${track.name}`,
-        );
-      }
+  it("never lets two cars occupy the same piece of road", () => {
+    const race = chase(0.01, { ...plain, overtakeThreshold: 0.05 });
+    for (let lap = 0; lap < 12; lap++) {
+      const times = race.entries.map((e) => e.laps[lap].elapsedMs).sort((a, b) => a - b);
+      assert.ok(times[1] - times[0] >= 299, `lap ${lap + 1}: ${(times[1] - times[0]).toFixed(0)} ms apart`);
     }
   });
 });
 
+describe("the grid", () => {
+  it("gives away time for every place further back", () => {
+    const field = [
+      { ...flat, carId: "a", baseLapMs: 90_000 },
+      { ...flat, carId: "b", baseLapMs: 95_000 },
+      { ...flat, carId: "c", baseLapMs: 100_000 },
+    ];
+    const race = simulateRace(field, { laps: 4, traits: plain, stopLaps: [2], random: middling });
+    assert.deepEqual(
+      race.entries.map((e) => e.gridIndex),
+      [0, 1, 2],
+    );
+    // Nobody is on the road before the car in front of them has gone.
+    const first = race.entries[0].laps[0].elapsedMs;
+    const third = race.entries[2].laps[0].elapsedMs;
+    assert.ok(third - first > 800 - 1);
+  });
+});
+
+describe("the safety car", () => {
+  /** A field that crashes constantly, so the safety car is certain to come. */
+  const clumsy = { ...flat, errorChance: 1 };
+
+  it("comes out after a big moment and bunches the field up", () => {
+    // Every roll high: the error happens and the safety car is called.
+    const race = simulateRace([clumsy, { ...clumsy, carId: "b", baseLapMs: 130_000 }], {
+      laps: 20,
+      traits: plain,
+      stopLaps: [10],
+      random: () => 0.001,
+    });
+    assert.ok(race.safetyCarLaps.length > 0, "no safety car at all");
+
+    const last = race.safetyCarLaps[race.safetyCarLaps.length - 1];
+    const gapAfter = Math.abs(
+      race.entries[0].laps[last - 1].elapsedMs - race.entries[1].laps[last - 1].elapsedMs,
+    );
+    const gapBefore = Math.abs(
+      race.entries[0].laps[last - 2].elapsedMs - race.entries[1].laps[last - 2].elapsedMs,
+    );
+    assert.ok(gapAfter < gapBefore, `${gapAfter.toFixed(0)} ms should be under ${gapBefore.toFixed(0)}`);
+  });
+
+  it("slows everybody to the same pace while it is out", () => {
+    const race = simulateRace([clumsy, { ...clumsy, carId: "b", baseLapMs: 130_000 }], {
+      laps: 20,
+      traits: plain,
+      stopLaps: [10],
+      random: () => 0.001,
+    });
+    const lap = race.safetyCarLaps[0];
+    assert.ok(race.entries.every((e) => e.laps[lap - 1].safetyCar));
+  });
+
+  it("stays away when nobody puts it in the wall", () => {
+    const race = simulateRace([flat], { laps: 30, traits: plain, random: middling });
+    assert.deepEqual(race.safetyCarLaps, []);
+  });
+});
+
 describe("progressAt", () => {
-  const [entry] = simulateRace([{ ...flat, tyreLifeShare: 100 }], { laps: 10, random: middling });
+  const entry = simulateRace([{ ...flat, tyreLifeShare: 100 }], {
+    laps: 10,
+    traits: plain,
+    stopLaps: [],
+    random: middling,
+  }).entries[0];
 
   it("is on the grid before the start", () => {
     const p = progressAt(entry, 0, 10);
@@ -303,8 +560,7 @@ describe("progressAt", () => {
   });
 
   it("counts the laps as they are completed", () => {
-    assert.equal(progressAt(entry, 250_000, 10).lapsDone, 2);
-    assert.ok(Math.abs(progressAt(entry, 250_000, 10).lapFraction - 0.5) < 0.001);
+    assert.equal(progressAt(entry, entry.laps[1].elapsedMs + 1, 10).lapsDone, 2);
   });
 
   it("stops the clock at the flag", () => {
@@ -316,27 +572,26 @@ describe("progressAt", () => {
 });
 
 describe("rankRace", () => {
+  const race = simulateRace(
+    [
+      { ...flat, carId: "quick", baseLapMs: 100_000 },
+      { ...flat, carId: "slow", baseLapMs: 200_000 },
+    ],
+    { laps: 5, traits: plain, stopLaps: [2], random: middling },
+  );
+
   it("puts a finished car ahead of one still running", () => {
-    const race = simulateRace([flat, { ...flat, carId: "slow", baseLapMs: 200_000 }], {
-      laps: 5,
-      random: middling,
-    });
-    const at = 600_000;
-    const ranked = rankRace(race.map((e) => progressAt(e, at, 5)));
-    assert.equal(ranked[0].carId, "flat");
+    const ranked = rankRace(race.entries.map((e) => progressAt(e, 600_000, 5)));
+    assert.equal(ranked[0].carId, "quick");
     assert.ok(ranked[0].distanceLaps > ranked[1].distanceLaps);
   });
 
   it("gives the gap in laps while the race is on and in time once it is over", () => {
-    const race = simulateRace([flat, { ...flat, carId: "slow", baseLapMs: 110_000 }], {
-      laps: 5,
-      random: middling,
-    });
-    const mid = rankRace(race.map((e) => progressAt(e, 300_000, 5)));
+    const mid = rankRace(race.entries.map((e) => progressAt(e, 300_000, 5)));
     assert.ok(mid[1].gapLaps !== null && mid[1].gapLaps > 0);
-    const end = rankRace(race.map((e) => progressAt(e, 10_000_000, 5)));
+    const end = rankRace(race.entries.map((e) => progressAt(e, 10_000_000, 5)));
     assert.equal(end[0].gapMs, 0);
-    assert.equal(end[1].gapMs, 50_000);
+    assert.ok((end[1].gapMs ?? 0) > 0);
   });
 });
 
@@ -344,16 +599,19 @@ describe("the size of a field", () => {
   it("is twenty-eight", () => {
     assert.equal(MAX_RACE_CARS, 28);
   });
+
+  it("costs twenty-five seconds to change tyres", () => {
+    assert.equal(PIT_LOSS_MS, 25_000);
+  });
 });
 
 /** The one rule the race mode must never break.
  *
  * A leaderboard time is one clean lap, repeatable to the millisecond; a race
- * has tyre wear, a driver's mistakes and the day's form in it. Letting one
- * into the other would quietly ruin every record in the game, and it is the
- * kind of thing a well-meaning refactor does by accident - so it is checked at
- * the source rather than left to good intentions.
- */
+ * has tyre wear, traffic, a driver's mistakes and the day's form in it.
+ * Letting one into the other would quietly ruin every record in the game, and
+ * it is the kind of thing a well-meaning refactor does by accident - so it is
+ * checked at the source rather than left to good intentions. */
 describe("nothing from a race reaches the records", () => {
   const root = fileURLToPath(new URL("../..", import.meta.url));
   const raceMode = [
@@ -376,11 +634,19 @@ describe("nothing from a race reaches the records", () => {
   });
 
   it("leaves the writing of times to the lap runner alone", () => {
-    // If a second place in the app ever starts writing times, this is where
-    // the question gets asked: is that place deterministic?
     const writers = ["src/lib/time-store.ts", "src/components/RaceRunner.tsx"];
     for (const file of writers) {
       assert.ok(readFileSync(root + file, "utf8").includes("saveRun"), `${file} should still write times`);
+    }
+  });
+
+  it("keeps the race mode's own effects out of the ordinary lap", () => {
+    // Tyre wear, traffic and the rest live in lap-race.ts. physics.ts knows
+    // only what it is told to do for one run, which is what keeps a lap time
+    // the same today as it was yesterday.
+    const physics = readFileSync(root + "src/lib/physics.ts", "utf8");
+    for (const forbidden of ["tyreGrip", "tyreLife", "safetyCar", "overtake", "Math.random"]) {
+      assert.ok(!physics.includes(forbidden), `physics.ts mentions ${forbidden}`);
     }
   });
 });

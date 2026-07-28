@@ -12,7 +12,8 @@ import {
   racePlaybackMs,
   rankRace,
   simulateRace,
-  type RaceEntry,
+  trackTraits,
+  type RaceResult,
 } from "@/lib/lap-race";
 import type { CarData, TrackData } from "@/lib/data";
 
@@ -49,7 +50,7 @@ export function LapRaceRunner({
   }`;
   const strokeWidth = Math.max(path.maxX - path.minX, path.maxY - path.minY, 1) / 120;
 
-  const [race, setRace] = useState<RaceEntry[] | null>(null);
+  const [race, setRace] = useState<RaceResult | null>(null);
   const [phase, setPhase] = useState<Phase>("counting");
   const [atMs, setAtMs] = useState(0);
   const rafRef = useRef<number | null>(null);
@@ -60,7 +61,7 @@ export function LapRaceRunner({
     let cancelled = false;
     const timer = setTimeout(() => {
       const paces = cars.map((car) => carPace(car, track));
-      const result = simulateRace(paces, { laps });
+      const result = simulateRace(paces, { laps, traits: trackTraits(track) });
       if (!cancelled) {
         setRace(result);
         setPhase("running");
@@ -72,7 +73,7 @@ export function LapRaceRunner({
     };
   }, [cars, track, laps]);
 
-  const slowestMs = race ? Math.max(...race.map((e) => e.totalTimeMs)) : 0;
+  const slowestMs = race ? Math.max(...race.entries.map((e) => e.totalTimeMs)) : 0;
 
   useEffect(() => {
     if (phase !== "running" || race === null) return;
@@ -94,10 +95,13 @@ export function LapRaceRunner({
 
   const carsById = useMemo(() => new Map(cars.map((c) => [c.id, c])), [cars]);
   const ranked = useMemo(
-    () => (race ? rankRace(race.map((e) => progressAt(e, atMs, laps))) : []),
+    () => (race ? rankRace(race.entries.map((e) => progressAt(e, atMs, laps))) : []),
     [race, atMs, laps],
   );
   const leader = ranked[0];
+  const traits = useMemo(() => trackTraits(track), [track]);
+  const currentLap = Math.min(laps, (leader?.lapsDone ?? 0) + 1);
+  const underSafetyCar = race?.safetyCarLaps.includes(currentLap) ?? false;
   // A gap in laps is only readable once it is a whole lap; below that the
   // useful number is how many seconds behind the car is, which is the fraction
   // of a lap it is down times how long the leader's laps are taking.
@@ -121,8 +125,12 @@ export function LapRaceRunner({
             {track.name} · {laps} Runden
           </h2>
           <p className="truncate text-xs text-zinc-400">
-            {((laps * track.lengthM) / 1000).toFixed(0)} km · {cars.length} Autos · jedes Auto
-            stoppt ein- oder zweimal
+            {((laps * track.lengthM) / 1000).toFixed(0)} km · {cars.length} Autos ·{" "}
+            {underSafetyCar ? (
+              <span className="font-semibold text-amber-300">Safety Car</span>
+            ) : (
+              <>Überholen kostet hier {(traits.overtakeThreshold * 100).toFixed(1)} % Vorsprung</>
+            )}
           </p>
         </div>
 
@@ -219,6 +227,23 @@ export function LapRaceRunner({
                     <span className="w-7 shrink-0 text-right font-mono font-bold text-zinc-400">
                       {racer.position}.
                     </span>
+                    {/* Where it started, so a race can be read as movement. */}
+                    <span
+                      className={`w-8 shrink-0 text-right font-mono text-[11px] ${
+                        racer.gridIndex + 1 > racer.position
+                          ? "text-emerald-400"
+                          : racer.gridIndex + 1 < racer.position
+                            ? "text-red-400"
+                            : "text-zinc-600"
+                      }`}
+                      title={`Startplatz ${racer.gridIndex + 1}`}
+                    >
+                      {racer.gridIndex + 1 === racer.position
+                        ? "·"
+                        : racer.gridIndex + 1 > racer.position
+                          ? `▲${racer.gridIndex + 1 - racer.position}`
+                          : `▼${racer.position - racer.gridIndex - 1}`}
+                    </span>
                     <span
                       className="w-20 shrink-0 truncate text-[11px] font-medium uppercase tracking-wide"
                       style={{ color: car ? brandColor(car.make) : undefined }}
@@ -267,31 +292,37 @@ export function LapRaceRunner({
           <header className="border-b border-zinc-800 bg-zinc-900 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
             Ergebnis
             <span className="ml-2 font-normal normal-case tracking-normal text-zinc-600">
-              schnellste Runde, Stopps und die Form, die das Auto an diesem Tag hatte
+              Startplatz, schnellste Runde, Stopps (✕ = verpatzt), Runden im Stau, Fehler und die
+            Tagesform
             </span>
           </header>
           <table className="w-full min-w-[40rem] text-sm">
             <thead>
               <tr className="bg-zinc-900 text-xs uppercase tracking-wide text-zinc-500">
                 <th className="px-3 py-2 text-right font-medium">#</th>
+                <th className="px-3 py-2 text-right font-medium">Start</th>
                 <th className="px-3 py-2 text-left font-medium">Auto</th>
                 <th className="px-3 py-2 text-right font-medium">Zeit</th>
                 <th className="px-3 py-2 text-right font-medium">Rückstand</th>
                 <th className="px-3 py-2 text-right font-medium">Schnellste</th>
                 <th className="px-3 py-2 text-right font-medium">Stopps</th>
+                <th className="px-3 py-2 text-right font-medium">Verkehr</th>
                 <th className="px-3 py-2 text-right font-medium">Fehler</th>
                 <th className="px-3 py-2 text-right font-medium">Form</th>
               </tr>
             </thead>
             <tbody>
               {ranked.map((racer) => {
-                const entry = race.find((e) => e.carId === racer.carId)!;
+                const entry = race.entries.find((e) => e.carId === racer.carId)!;
                 const car = carsById.get(racer.carId);
                 const fastest = Math.min(...entry.laps.filter((l) => !l.pitted).map((l) => l.lapTimeMs));
                 return (
                   <tr key={racer.carId} className="border-t border-zinc-800 bg-zinc-900/50">
                     <td className="px-3 py-2 text-right font-mono font-bold text-zinc-400">
                       {racer.position}.
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-zinc-500">
+                      {racer.gridIndex + 1}.
                     </td>
                     <td className="px-3 py-2 text-white">
                       <span
@@ -311,7 +342,13 @@ export function LapRaceRunner({
                     <td className="px-3 py-2 text-right font-mono text-zinc-400">
                       {formatTimeMs(fastest)}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-zinc-400">{entry.stops}</td>
+                    <td className="px-3 py-2 text-right font-mono text-zinc-400">
+                      {entry.stops}
+                      {entry.botchedStops > 0 && <span className="text-amber-400"> ✕</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-zinc-400">
+                      {entry.laps.filter((l) => l.heldUp).length}
+                    </td>
                     <td className="px-3 py-2 text-right font-mono text-zinc-400">
                       {entry.laps.filter((l) => l.error).length}
                     </td>
@@ -327,8 +364,8 @@ export function LapRaceRunner({
       )}
 
       <p className="text-xs text-zinc-500">
-        Ein Rennen hat Zufall: Fahrfehler, die Tagesform des Motors und der Verschleiß der Reifen. Die Zeiten
-        gehen deshalb <strong>nicht</strong> in die Streckenranglisten — die versprechen eine saubere,
+        Ein Rennen hat Zufall: Qualifying, Fahrfehler, die Tagesform des Motors, den Verschleiß der Reifen —
+        und Verkehr. Die Zeiten gehen deshalb <strong>nicht</strong> in die Streckenranglisten — die versprechen eine saubere,
         wiederholbare Runde.{" "}
         <Link href="/" className="text-emerald-400 hover:text-emerald-300">
           Zu den Strecken
