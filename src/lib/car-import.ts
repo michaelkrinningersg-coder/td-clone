@@ -1,4 +1,4 @@
-import type { Drivetrain } from "@/lib/physics";
+import { RATED_SPEED_MAX, RATED_SPEED_MIN, rawRatedSpeedRadS, type Drivetrain } from "@/lib/physics";
 import { carSlug } from "@/lib/slug";
 
 /** Parsing for the autoevolution-derived spec dump published at
@@ -443,10 +443,32 @@ export function keepBaseAndTopVariants(cars: ImportedCar[]): ImportedCar[] {
   return kept;
 }
 
+/** Power and torque together fix the engine speed the car makes its power at:
+ * P = M · omega. A row where that lands at 32.000/min (a Toyota Auris quoted
+ * with 90 PS and 20 Nm) or at 330/min (a Mercedes 160 CDI quoted with 1.801 Nm)
+ * is not an unusual engine, it is a misparsed figure - and the model would
+ * quietly clamp it to a speed no part of the source says. */
+function ratedSpeedIsReal(car: ImportedCar): boolean {
+  const raw = rawRatedSpeedRadS(car);
+  return raw >= RATED_SPEED_MIN && raw <= RATED_SPEED_MAX;
+}
+
+/** Energy alone puts a floor under 0-100: half the kinetic energy divided by
+ * the power, before a gram of drag or a single shift. A car quoted below its
+ * own floor cannot be simulated honestly at any grip level. */
+function accelIsReachable(car: ImportedCar): boolean {
+  const v = 100 / 3.6;
+  return car.accel0to100s >= (0.5 * car.weightKg * v * v) / (car.powerPs * PS_TO_WATT_IMPORT * 0.9);
+}
+
+const PS_TO_WATT_IMPORT = 735.49875;
+
 /** Guards against obviously broken source rows (a 5000 kg "sports car", a
  * 0.1 s 0-100). These are data errors, not interesting outliers. */
 export function isPlausible(car: ImportedCar): boolean {
   return (
+    ratedSpeedIsReal(car) &&
+    accelIsReachable(car) &&
     car.topSpeedKph >= 40 &&
     car.topSpeedKph <= 500 &&
     car.accel0to100s >= 1 &&

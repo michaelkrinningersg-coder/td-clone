@@ -101,8 +101,19 @@ export function wheelPowerW(car: CarPhysicsInput): number {
  * peak, an S2000 203 of 208, a Golf GTD 344 of 350. */
 const TORQUE_AT_POWER_PEAK = 0.98;
 
-/** Engine speed at the redline, relative to the power peak. */
-const REDLINE_FRACTION = 1.1;
+/** Engine speed at the redline, relative to the power peak.
+ *
+ * Not the same everywhere: a turbodiesel making its power at 3.800/min still
+ * turns to about 5.000, a third past the peak, while an atmospheric engine
+ * already peaking at 6.500 has barely five hundred left. The broad engines are
+ * the ones that need the room - they carry a gear far longer than the fixed
+ * value allowed, which cost them a shift they do not really make. */
+const REDLINE_BROAD = 1.3;
+const REDLINE_PEAKY = 1.05;
+
+export function redlineFraction(car: CarPhysicsInput): number {
+  return REDLINE_BROAD + (REDLINE_PEAKY - REDLINE_BROAD) * revviness(car);
+}
 
 /** Where in the rev range peak torque sits, and how much of it is there just
  * off idle - for the two ends of the field. A low-revving engine is broad: it
@@ -129,9 +140,18 @@ function curveShape(car: CarPhysicsInput) {
   };
 }
 
-/** Ratio between the speeds top gear and first gear are good for. Four and a
- * half is ordinary; the gear count decides how finely it is divided. */
-const GEARBOX_SPREAD = 4.5;
+/** Ratio between the speeds top gear and first gear are good for.
+ *
+ * Four and a half is the middle of the road, but the spread is not the same
+ * across the field: an engine that pulls to 8.000/min covers a range of speeds
+ * in one gear that a diesel revving to 3.700 has to split over two, so the
+ * diesel is given the wider box - real ones spread five to six where a
+ * high-revving atmospheric engine sits nearer four. Clamped either side so an
+ * odd rated speed cannot invent a gearbox no manufacturer builds. */
+function gearboxSpread(car: CarPhysicsInput): number {
+  const ratedRpm = (ratedSpeedRadS(car) * 60) / (2 * Math.PI);
+  return Math.max(3.5, Math.min(6.5, 4.5 * Math.sqrt(5200 / ratedRpm)));
+}
 
 /** Where the engine makes its rated power, in rad/s.
  *
@@ -145,9 +165,20 @@ const GEARBOX_SPREAD = 4.5;
  * Clamped either side because the dataset does contain the odd implausible
  * torque figure, and a nonsense engine speed would poison the gearing. */
 export function ratedSpeedRadS(car: CarPhysicsInput): number {
-  const raw = (car.powerPs * PS_TO_WATT) / (TORQUE_AT_POWER_PEAK * car.torqueNm);
-  return Math.max(210, Math.min(1000, raw)); // ~2.000 to ~9.550 /min
+  return Math.max(RATED_SPEED_MIN, Math.min(RATED_SPEED_MAX, rawRatedSpeedRadS(car)));
 }
+
+/** The engine speed power and torque imply, before it is bounded - the number
+ * the import uses to throw a car out rather than let the clamp invent one. */
+export function rawRatedSpeedRadS(car: Pick<CarPhysicsInput, "powerPs" | "torqueNm">): number {
+  return (car.powerPs * PS_TO_WATT) / (TORQUE_AT_POWER_PEAK * car.torqueNm);
+}
+
+/** Slowest and fastest engine speeds the model will represent: ~2.000/min, at
+ * which even a big diesel is past its power peak, to ~9.550/min, past every
+ * road engine bar a handful of atmospheric specials. */
+export const RATED_SPEED_MIN = 210;
+export const RATED_SPEED_MAX = 1000;
 
 /** Engine torque at a given speed, as a share of the peak.
  *
@@ -171,8 +202,9 @@ export function torqueFactor(car: CarPhysicsInput, radS: number): number {
     const t = (x - shape.peakAt) / (1 - shape.peakAt);
     return 1 - t * (1 - TORQUE_AT_POWER_PEAK);
   }
-  if (x <= REDLINE_FRACTION) {
-    const t = (x - 1) / (REDLINE_FRACTION - 1);
+  const redline = redlineFraction(car);
+  if (x <= redline) {
+    const t = (x - 1) / (redline - 1);
     return TORQUE_AT_POWER_PEAK * (1 - shape.fadePastPeak * t);
   }
   return 0; // past the redline there is no drive at all
@@ -209,7 +241,7 @@ export function gearTopSpeedsMps(car: CarPhysicsInput): number[] {
   const vTop = powerLimitedTopSpeedMps(car);
   const gears = Math.max(1, car.gearCount);
   if (gears === 1) return [vTop];
-  const step = Math.pow(GEARBOX_SPREAD, 1 / (gears - 1));
+  const step = Math.pow(gearboxSpread(car), 1 / (gears - 1));
   return Array.from({ length: gears }, (_, i) => vTop / Math.pow(step, gears - 1 - i));
 }
 
@@ -239,7 +271,7 @@ export function buildGearbox(car: CarPhysicsInput): Gearbox {
   for (let gear = 0; gear < gearTopSpeeds.length - 1; gear++) {
     // Scan up from where the lower gear is still pulling to where it runs out.
     const from = gearTopSpeeds[gear] * 0.2;
-    const to = gearTopSpeeds[gear] * REDLINE_FRACTION;
+    const to = gearTopSpeeds[gear] * redlineFraction(car);
     let crossing = to;
     for (let v = from; v <= to; v += 0.25) {
       if (gearForceN(car, gearTopSpeeds[gear + 1], v) >= gearForceN(car, gearTopSpeeds[gear], v)) {
@@ -314,7 +346,7 @@ function accelerationMps2(
 
 /** Time from rest to 100 km/h on the flat for a given launch limit, including
  * the gearchanges. This is what gets solved against the car's real figure. */
-function simulate0to100(car: CarPhysicsInput, gearbox: Gearbox, launchLimitN: number): number {
+export function simulate0to100(car: CarPhysicsInput, gearbox: Gearbox, launchLimitN: number): number {
   const target = 100 * KPH_TO_MPS;
   const shifts = gearbox.shiftSpeeds;
   const shiftCost = car.manualGearbox ? SHIFT_TIME_S.manual : SHIFT_TIME_S.automatic;

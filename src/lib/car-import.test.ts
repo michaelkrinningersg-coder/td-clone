@@ -476,6 +476,26 @@ describe("isPlausible", () => {
     assert.equal(isPlausible({ ...base, widthMm: 2100, heightMm: 2300 }), true); // a big van
   });
 
+  // Power and torque fix the engine speed: P = M · omega. The source really
+  // does hold a Toyota Auris with 90 PS and 20 Nm, which would be an engine
+  // making its power at 32.000/min.
+  it("rejects a power and torque pair that contradict each other", () => {
+    assert.equal(isPlausible({ ...base, powerPs: 90, torqueNm: 20 }), false); // ~32.000/min
+    assert.equal(isPlausible({ ...base, powerPs: 83, torqueNm: 1801 }), false); // ~330/min
+    assert.equal(isPlausible({ ...base, powerPs: 240, torqueNm: 208 }), true); // ~8.300/min, an S2000
+    assert.equal(
+      isPlausible({ ...base, powerPs: 140, torqueNm: 320, weightKg: 1400, accel0to100s: 9.5 }),
+      true, // ~3.200/min, a diesel
+    );
+  });
+
+  // Half the kinetic energy divided by the power is a floor no gearbox or tyre
+  // can get under, so a car quoted below it cannot be simulated honestly.
+  it("rejects a 0-100 time faster than the power allows", () => {
+    assert.equal(isPlausible({ ...base, powerPs: 125, weightKg: 1745, accel0to100s: 7 }), false);
+    assert.equal(isPlausible({ ...base, powerPs: 125, weightKg: 1745, accel0to100s: 9.5 }), true);
+  });
+
   it("rejects tyres, gears and a drag figure outside what a car can carry", () => {
     assert.equal(isPlausible({ ...base, tyreWidthMm: 40 }), false);
     assert.equal(isPlausible({ ...base, gearCount: 0 }), false);

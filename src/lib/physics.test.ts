@@ -6,6 +6,7 @@ import {
   driveForceN,
   gearTopSpeedsMps,
   ratedSpeedRadS,
+  redlineFraction,
   torqueFactor,
   dragForceN,
   dragLimitedTopSpeedMps,
@@ -309,12 +310,15 @@ describe("tyres", () => {
 });
 
 describe("gearbox", () => {
-  // Every shift is a moment with no drive. More ratios means more of them.
-  it("costs time for each additional gear", () => {
+  // Two forces pull against each other: closer ratios keep the engine nearer
+  // its power peak, and every extra shift is a moment with no drive. Neither
+  // end wins outright, so a middling box beats both a three-speed and a nine.
+  it("has a best gear count rather than rewarding more or fewer", () => {
     const straight: Segment[] = [{ kind: "straight", lengthM: 2000 }];
-    const few = simulateRun({ ...golfGti, gearCount: 4 }, straight).totalTimeMs;
-    const many = simulateRun({ ...golfGti, gearCount: 9 }, straight).totalTimeMs;
-    assert.ok(many > few, `9 gears (${many}ms) should cost more than 4 (${few}ms)`);
+    const time = (gearCount: number) => simulateRun({ ...golfGti, gearCount }, straight).totalTimeMs;
+    const middling = time(6);
+    assert.ok(middling < time(3), `6 gears (${middling}ms) should beat 3 (${time(3)}ms)`);
+    assert.ok(middling < time(9), `6 gears (${middling}ms) should beat 9 (${time(9)}ms)`);
   });
 
   it("costs a manual more per shift than an automatic", () => {
@@ -371,7 +375,16 @@ describe("torque curve", () => {
   it("falls away past the rated speed and stops at the redline", () => {
     const rated = ratedSpeedRadS(golfGti);
     assert.ok(torqueFactor(golfGti, rated * 1.05) < torqueFactor(golfGti, rated));
-    assert.equal(torqueFactor(golfGti, rated * 1.2), 0);
+    assert.equal(torqueFactor(golfGti, rated * 1.35), 0);
+  });
+
+  // A diesel making its power at 3.700/min still turns to about 5.000, half as
+  // much room again as an engine already peaking at 8.000.
+  it("leaves a low-revving engine more room past the peak than a screamer", () => {
+    const gtd = { ...golfGti, powerPs: 170, torqueNm: 350 };
+    const s2000 = { ...golfGti, powerPs: 240, torqueNm: 208 };
+    assert.ok(torqueFactor(gtd, ratedSpeedRadS(gtd) * 1.25) > 0);
+    assert.equal(torqueFactor(s2000, ratedSpeedRadS(s2000) * 1.25), 0);
   });
 
   // Power is torque times engine speed, so a curve that peaked after the rated
@@ -390,6 +403,14 @@ describe("gear ratios", () => {
     const speeds = gearTopSpeedsMps({ ...golfGti, gearCount: 6 });
     assert.equal(speeds.length, 6);
     for (let i = 1; i < speeds.length; i++) assert.ok(speeds[i] > speeds[i - 1]);
+  });
+
+  // An engine that pulls to 8.000/min covers in one gear what a diesel revving
+  // to 3.700 has to split over two, so the diesel gets the wider box.
+  it("spreads a low-revving box wider than a high-revving one", () => {
+    const gtd = gearTopSpeedsMps({ ...golfGti, powerPs: 170, torqueNm: 350, gearCount: 6 });
+    const s2000 = gearTopSpeedsMps({ ...golfGti, powerPs: 240, torqueNm: 208, gearCount: 6 });
+    assert.ok(gtd[5] / gtd[0] > s2000[5] / s2000[0]);
   });
 
   it("takes bigger steps with fewer gears", () => {
@@ -415,7 +436,8 @@ describe("gear ratios", () => {
     const gearbox = buildGearbox(golfGti);
     assert.equal(gearbox.shiftSpeeds.length, golfGti.gearCount - 1);
     gearbox.shiftSpeeds.forEach((v, i) => {
-      assert.ok(v <= gearbox.gearTopSpeeds[i] * 1.1 + 1e-9, `shift ${i + 1} is past the redline`);
+      // 1.3 is the widest redline the model gives any engine.
+      assert.ok(v <= gearbox.gearTopSpeeds[i] * 1.3 + 1e-9, `shift ${i + 1} is past the redline`);
       assert.ok(v > 0);
     });
   });
@@ -427,25 +449,30 @@ describe("gear ratios", () => {
     assert.ok(inFirst > inTop);
   });
 
-  // Same power, same top speed, same gear count: gearing follows the rated
-  // speed, so both sit at the same point on their curves. Only the shape of
-  // the curve can tell them apart - which is exactly what the torque figure is
-  // in the model for.
-  it("lets the broad engine pull harder off idle and the peaky one past the peak", () => {
+  // Same power, same top speed, same gear count. Put both on the same ratios
+  // by hand - the real boxes differ, because a diesel is spread wider - and
+  // only the shape of the curve is left to tell them apart, which is exactly
+  // what the torque figure is in the model for.
+  it("separates a broad engine from a peaky one on the same ratios", () => {
     const diesel = { ...golfGti, powerPs: 220, torqueNm: 450 };
     const screamer = { ...golfGti, powerPs: 220, torqueNm: 200 };
-    const dGear = buildGearbox(diesel);
-    const sGear = buildGearbox(screamer);
-    const firstGear = dGear.gearTopSpeeds[0];
-    assert.deepEqual(dGear.gearTopSpeeds, sGear.gearTopSpeeds, "gearing should be identical");
+    const shared = buildGearbox(diesel);
+    const firstGear = shared.gearTopSpeeds[0];
     assert.ok(
-      driveForceN(diesel, dGear, firstGear * 0.15) > driveForceN(screamer, sGear, firstGear * 0.15),
+      driveForceN(diesel, shared, firstGear * 0.15) > driveForceN(screamer, shared, firstGear * 0.15),
       "the diesel should pull better just off idle",
     );
+    // At its own redline the peaky engine still has most of its torque, where
+    // the diesel has given a third of it away.
     assert.ok(
-      driveForceN(screamer, sGear, firstGear * 1.08) > driveForceN(diesel, dGear, firstGear * 1.08),
-      "the screamer should hold on better past the power peak",
+      torqueFactor(screamer, ratedSpeedRadS(screamer) * redlineFraction(screamer)) >
+        torqueFactor(diesel, ratedSpeedRadS(diesel) * redlineFraction(diesel)),
+      "the screamer should hold more of its torque to the redline",
     );
+    // It runs out sooner all the same: an engine already spinning at 8.000/min
+    // has almost no rev range left, where the diesel has a third to go.
+    assert.equal(driveForceN(screamer, shared, firstGear * 1.15), 0);
+    assert.ok(driveForceN(diesel, shared, firstGear * 1.15) > 0);
   });
 
   // Crawling out of a hairpin is where a broad powerband earns its keep.

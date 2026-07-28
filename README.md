@@ -45,13 +45,23 @@ Höhe, Bremsen vorn und hinten, Reifenbreite und Getriebe. Fehlt einer davon, fl
 Auto raus statt geschätzt zu werden. Ergebnis landet in `src/data/cars.json` und ist
 eingecheckt, der Import muss also nicht laufen, um die App zu starten.
 
-Der Trichter von 30.066 Motorvarianten auf 5.472 Autos:
+Zwei Plausibilitätsprüfungen greifen nicht auf einzelne Werte, sondern auf deren
+Widerspruch zueinander. Leistung und Drehmoment legen über `P = M · ω` die Nenndrehzahl
+fest; liegt die außerhalb von 2.000 bis 9.550/min, ist nicht der Motor ungewöhnlich,
+sondern die Zahl falsch gelesen — die Quelle führt einen Toyota Auris mit 90 PS bei 20 Nm,
+was 32.000/min entspräche, und einen Mercedes 160 CDI mit 1.801 Nm, was 330/min entspräche.
+Und die halbe Bewegungsenergie geteilt durch die Leistung ist eine Untergrenze für 0–100,
+unter die kein Getriebe und kein Reifen kommt; ein BMW X1 mit 125 PS und 1.745 kg in 7,0 s
+liegt darunter. Zusammen fliegen 11 Autos raus, die sich nicht reparieren lassen, ohne
+einen Wert zu erfinden.
+
+Der Trichter von 30.066 Motorvarianten auf 5.461 Autos:
 
 | Schritt | bleiben |
 |---|---|
 | vollständige, plausible Daten | 16.932 |
 | Varianten mit identischen Fahrwerten zusammengefasst | 16.812 |
-| je Marke + Modell + Baujahr nur Einstiegs- und Topmotorisierung | 5.472 |
+| je Marke + Modell + Baujahr nur Einstiegs- und Topmotorisierung | 5.461 |
 
 Der letzte Schritt wirft die Zwischenmotorisierungen weg: die Quelle führt jede je
 verkaufte Version, etwa 46 Ausführungen des Volvo S80 von 2009. Gruppiert wird bewusst
@@ -75,6 +85,20 @@ vom hochdrehenden Sauger (S2000 ~8.100/min) und trifft die realen Werte erstaunl
 oberste Gang liegt dort, wo der Motor gegen die Luft ausläuft, die übrigen geometrisch
 darunter. Die Form der Drehmomentkurve hängt am Motorcharakter — ein breit auslegender
 Motor zieht unten heraus, ein spitzer hält oben länger.
+
+Zwei Dinge folgen ebenfalls der Nenndrehzahl statt fest zu sein. Die **Getriebespreizung**:
+wer bis 8.000/min zieht, deckt in einem Gang ab, was ein Diesel bei 3.700/min auf zwei
+verteilen muss — reale Diesel spreizen 5 bis 6, hochdrehende Sauger eher 4. Und die
+**Abregeldrehzahl**: ein Diesel mit Leistungsspitze bei 3.800/min dreht noch bis etwa
+5.000, ein Sauger mit Spitze bei 6.500 hat kaum 500 Umdrehungen übrig (1,3 gegen 1,05 der
+Nenndrehzahl). Beides zusammen halbiert den Anteil der Autos, deren angegebene
+0-100-Zeit das Modell selbst mit perfekter Traktion nicht erreicht, von 22,5 % auf 8,3 %
+(Rückstand über 0,5 s: 1.229 → 454 Autos, über 2 s: 179 → 55).
+
+Nebenbei bekommt die Gangzahl damit ein echtes Optimum statt einer Einbahnstraße: engere
+Stufen halten den Motor näher an der Leistungsspitze, jeder Schaltvorgang kostet Zugkraft.
+Für den Golf GTI auf 2.000 m liegt das Minimum bei sechs Gängen, drei und neun sind beide
+langsamer.
 
 **Grenzen nach oben.** Kein festes Tempolimit. Ein Auto läuft, bis der Luftwiderstand
 (cw × Stirnfläche) es einholt oder der Drehzahlbegrenzer im obersten Gang greift. Die
