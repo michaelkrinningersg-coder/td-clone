@@ -44,6 +44,8 @@ export interface TrackData {
   outline?: [number, number][];
   /** Set when the track is a test against the speedometer - see SpeedTest. */
   speedTest?: SpeedTest;
+  /** Height above sea level in metres - see TrackDefinition. */
+  altitudeM?: number;
 }
 
 export const cars: CarData[] = (carsJson as Omit<CarData, "id">[])
@@ -65,6 +67,7 @@ export const tracks: TrackData[] = trackDefs
     segments: track.segments,
     outline: track.outline,
     speedTest: track.speedTest,
+    altitudeM: track.altitudeM,
   }))
   .sort((a, b) => a.type.localeCompare(b.type) || a.lengthM - b.lengthM);
 

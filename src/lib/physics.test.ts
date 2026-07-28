@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  airDensityRatio,
+  altitudePowerFactor,
+  bankedGripFactor,
   brakingDecelMps2,
+  corneringSpeedCapMps,
   buildGearbox,
   driveForceN,
   gearTopSpeedsMps,
@@ -14,10 +18,12 @@ import {
   frontalAreaM2,
   simulateRun,
   simulateSpeedTest,
+  simulateTrack,
   wheelPowerW,
   type CarPhysicsInput,
 } from "./physics";
 import type { Segment, SpeedTest } from "./track-types";
+import { tracks } from "./data";
 
 const golfGti: CarPhysicsInput = {
   topSpeedKph: 250,
@@ -198,6 +204,47 @@ describe("trace", () => {
   });
 });
 
+describe("air density", () => {
+  it("thins the air with height and thickens it below sea level", () => {
+    assert.equal(airDensityRatio(0), 1);
+    // Mexiko-Stadt and Kyalami, against the published figures.
+    assert.ok(Math.abs(airDensityRatio(2232) - 0.8) < 0.02, `${airDensityRatio(2232)}`);
+    assert.ok(Math.abs(airDensityRatio(1753) - 0.84) < 0.02, `${airDensityRatio(1753)}`);
+    assert.ok(airDensityRatio(-25) > 1, "Baku sits below sea level");
+  });
+
+  it("costs a combustion car time at altitude and leaves an electric one alone", () => {
+    assert.ok(altitudePowerFactor(golfGti, 2232) < 0.86);
+    assert.equal(altitudePowerFactor({ ...golfGti, fuelType: "Electric" }, 2232), 1);
+    assert.equal(altitudePowerFactor(golfGti, 0), 1);
+  });
+
+  // Less air is less drag but also less oxygen, and for a road car the engine
+  // loses more than the body gains.
+  it("makes a lap at altitude slower overall, not faster", () => {
+    const segments: Segment[] = [
+      { kind: "straight", lengthM: 900 },
+      { kind: "corner", lengthM: 200, radiusM: 60, dir: "right" },
+      { kind: "straight", lengthM: 700 },
+    ];
+    const track = { segments, lengthM: 1800 };
+    const seaLevel = simulateTrack(golfGti, track).totalTimeMs;
+    const thin = simulateTrack(golfGti, { ...track, altitudeM: 2232 }).totalTimeMs;
+    assert.ok(thin > seaLevel, `${thin}ms at altitude should beat ${seaLevel}ms at sea level`);
+    // An electric car only gets the drag back, so it gains where a petrol loses.
+    const ev = { ...golfGti, fuelType: "Electric" };
+    assert.ok(simulateTrack(ev, { ...track, altitudeM: 2232 }).totalTimeMs < simulateTrack(ev, track).totalTimeMs);
+  });
+
+  it("leaves a track with no altitude exactly as it was", () => {
+    const segments: Segment[] = [{ kind: "straight", lengthM: 1500 }];
+    assert.equal(
+      simulateTrack(golfGti, { segments, lengthM: 1500 }).totalTimeMs,
+      simulateRun(golfGti, segments).totalTimeMs,
+    );
+  });
+});
+
 describe("aerodynamics", () => {
   it("computes frontal area from the car's own dimensions", () => {
     // 0.85 x 1.799 m x 1.492 m
@@ -287,6 +334,48 @@ describe("braking", () => {
     const good = simulateRun({ ...golfGti, brakeFront: "ventilated-disc", brakeRear: "ventilated-disc" }, straight);
     const poor = simulateRun({ ...golfGti, brakeFront: "drum", brakeRear: "drum" }, straight);
     assert.equal(good.totalTimeMs, poor.totalTimeMs);
+  });
+});
+
+describe("banking", () => {
+  it("leaves a flat corner exactly as it was", () => {
+    assert.equal(bankedGripFactor(0.95, 0), 0.95);
+    assert.equal(corneringSpeedCapMps(200, golfGti, 0), corneringSpeedCapMps(200, golfGti));
+  });
+
+  it("carries more speed the steeper the road is tipped", () => {
+    const flat = corneringSpeedCapMps(250, golfGti, 0);
+    const indy = corneringSpeedCapMps(250, golfGti, 9.2);
+    const daytona = corneringSpeedCapMps(250, golfGti, 31);
+    assert.ok(indy > flat && daytona > indy);
+    // Nine degrees is worth about a sixth more speed through the turn.
+    assert.ok(Math.abs(indy / flat - 1.18) < 0.03, `${(indy / flat).toFixed(3)}`);
+    // Thirty-one degrees nearly doubles it, which is what a superspeedway is.
+    assert.ok(daytona / flat > 1.7, `${(daytona / flat).toFixed(3)}`);
+  });
+
+  // The formula's denominator goes to zero where the banking alone would hold
+  // the car up, and a wall of death is not a lap time.
+  it("stays finite at a banking no circuit has", () => {
+    const wall = corneringSpeedCapMps(250, golfGti, 80);
+    assert.ok(Number.isFinite(wall) && wall > 0, `${wall}`);
+  });
+
+  it("makes the oval a quicker lap than the same shape flat", () => {
+    const oval = tracks.find((t) => t.name === "Indianapolis Oval")!;
+    const flat = {
+      ...oval,
+      segments: oval.segments.map((s) => (s.kind === "corner" ? { ...s, bankingDegrees: 0 } : s)),
+    };
+    assert.ok(simulateTrack(golfGti, oval).totalTimeMs < simulateTrack(golfGti, flat).totalTimeMs);
+  });
+
+  it("banks the ovals and nothing else", () => {
+    const banked = tracks
+      .filter((t) => t.segments.some((s) => s.kind === "corner" && s.bankingDegrees))
+      .map((t) => t.name)
+      .sort();
+    assert.deepEqual(banked, ["Indianapolis Oval", "Trioval 4500 m"]);
   });
 });
 

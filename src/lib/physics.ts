@@ -24,6 +24,10 @@ export interface CarPhysicsInput {
   weightKg: number;
   torqueNm: number;
   drivetrain: Drivetrain;
+  /** Only the model's air-density rule reads this, to leave an electric motor
+   * its full power at altitude. Optional so a hand-built test car need not
+   * carry it; every imported car does. */
+  fuelType?: string;
   dragCoefficient: number;
   widthMm: number;
   heightMm: number;
@@ -71,6 +75,34 @@ const SHIFT_TIME_S = { manual: 0.45, automatic: 0.2 };
 
 export function frontalAreaM2(car: CarPhysicsInput): number {
   return FRONTAL_AREA_FACTOR * (car.widthMm / 1000) * (car.heightMm / 1000);
+}
+
+/** How thin the air is at a track's altitude, as a share of sea level.
+ *
+ * The barometric formula for the standard atmosphere. Mexiko-Stadt at 2.232 m
+ * runs on about four fifths of the air Monza has, Kyalami on about five sixths.
+ * Nothing here is per car and nothing is estimated - the altitudes are surveyed
+ * figures on the track, the formula is the ISA. */
+export function airDensityRatio(altitudeM: number): number {
+  return Math.pow(1 - 2.25577e-5 * altitudeM, 4.2559);
+}
+
+/** How much of its power an engine keeps in thin air.
+ *
+ * An atmospheric engine loses it about in proportion: less air, less fuel, less
+ * power. A turbo winds up the boost and gives back most of the loss until it
+ * runs out of turbine. The dataset does not say which engine is which - the
+ * variant strings name forced induction for barely a fifth of the field and
+ * miss 699 diesels that are all turbocharged - so guessing per car would
+ * mislabel more cars than it labelled. One exponent for the whole field
+ * instead, nearer the atmospheric end because most of the field is.
+ *
+ * An electric motor carries its own oxidiser and does not care. */
+const ALTITUDE_POWER_EXPONENT = 0.75;
+
+export function altitudePowerFactor(car: CarPhysicsInput, altitudeM: number): number {
+  if (car.fuelType === "Electric") return 1;
+  return Math.pow(airDensityRatio(altitudeM), ALTITUDE_POWER_EXPONENT);
 }
 
 export function dragForceN(car: CarPhysicsInput, speedMps: number): number {
@@ -317,13 +349,37 @@ export function effectiveTopSpeedMps(car: CarPhysicsInput): number {
 
 /** Cornering grip. The friction constant is shared by every car; what varies is
  * real: how much tyre is under how much car, and which wheels drive. */
-export function corneringSpeedCapMps(radiusM: number, car: CarPhysicsInput): number {
+export function corneringSpeedCapMps(
+  radiusM: number,
+  car: CarPhysicsInput,
+  bankingDegrees = 0,
+): number {
   const baseMu = 0.95;
   const tyreMmPerTonne = (car.tyreWidthMm * 4) / (car.weightKg / 1000);
   // Around 600 mm of tread per tonne is ordinary; more grips better.
   const tyreFactor = Math.max(0.75, Math.min(1.35, tyreMmPerTonne / 600));
   const drivetrainFactor = car.drivetrain === "AWD" ? 1.05 : car.drivetrain === "FWD" ? 0.95 : 1.0;
-  return Math.sqrt(baseMu * tyreFactor * drivetrainFactor * G * radiusM);
+  const mu = baseMu * tyreFactor * drivetrainFactor;
+  return Math.sqrt(bankedGripFactor(mu, bankingDegrees) * G * radiusM);
+}
+
+/** What a banked corner is worth, as the factor replacing plain friction.
+ *
+ * On the flat the tyres carry the whole cornering force and the limit is
+ * `mu · g · r`. Tip the road and part of the car's own weight points into the
+ * corner instead, while the surface presses harder on the tyres:
+ *
+ *     v² = g · r · (mu · cos θ + sin θ) / (cos θ − mu · sin θ)
+ *
+ * At Indianapolis' nine degrees that is worth about a sixth more speed; on a
+ * thirty-degree superspeedway it nearly doubles it, which is the whole reason
+ * those places exist. The denominator goes to zero when the banking alone would
+ * hold the car - a wall of death - so it is floored well before that. */
+export function bankedGripFactor(mu: number, bankingDegrees: number): number {
+  if (bankingDegrees <= 0) return mu;
+  const theta = (bankingDegrees * Math.PI) / 180;
+  const denominator = Math.max(0.15, Math.cos(theta) - mu * Math.sin(theta));
+  return (mu * Math.cos(theta) + Math.sin(theta)) / denominator;
 }
 
 /** Net acceleration at a given speed. `launchLimitN` is the traction ceiling:
@@ -389,7 +445,10 @@ function speedLimitProfile(car: CarPhysicsInput, segments: Segment[], stepM: num
   const limits: number[] = [];
   for (const seg of segments) {
     const steps = Math.max(1, Math.round(seg.lengthM / stepM));
-    const cap = seg.kind === "corner" ? corneringSpeedCapMps(seg.radiusM, car) : Number.POSITIVE_INFINITY;
+    const cap =
+      seg.kind === "corner"
+        ? corneringSpeedCapMps(seg.radiusM, car, seg.bankingDegrees ?? 0)
+        : Number.POSITIVE_INFINITY;
     for (let i = 0; i < steps; i++) limits.push(cap);
   }
   return limits;
@@ -519,9 +578,16 @@ export function simulateRun(
  *
  * `distanceM` still carries the metres the car really used, so anything that
  * wants an average speed gets an honest one. */
-export function simulateSpeedTest(car: CarPhysicsInput, test: SpeedTest, drawnLengthM: number): SimResult {
+export function simulateSpeedTest(
+  car: CarPhysicsInput,
+  test: SpeedTest,
+  drawnLengthM: number,
+  mods: RunModifiers = {},
+): SimResult {
+  const powerFactor = mods.powerFactor ?? 1;
+  const dragFactor = mods.dragFactor ?? 1;
   const gearbox = buildGearbox(car);
-  const launchLimitN = solveLaunchLimitN(car, gearbox);
+  const launchLimitN = mods.launchLimitN ?? solveLaunchLimitN(car, gearbox);
   const shiftCost = car.manualGearbox ? SHIFT_TIME_S.manual : SHIFT_TIME_S.automatic;
   const from = test.fromKph * KPH_TO_MPS;
   const target = test.toKph * KPH_TO_MPS;
@@ -535,7 +601,7 @@ export function simulateSpeedTest(car: CarPhysicsInput, test: SpeedTest, drawnLe
 
   let stalled = false;
   while (v < target && t < test.timeoutS) {
-    const a = accelerationMps2(car, gearbox, v, launchLimitN, 0);
+    const a = accelerationMps2(car, gearbox, v, launchLimitN, 0, powerFactor, dragFactor);
     // Not "a <= 0": as a car nears the speed drag holds it at, the acceleration
     // creeps towards zero and the run would crawl to the timeout a millimetre
     // at a time. Below a fiftieth of a g it is not going to get there.
@@ -600,14 +666,29 @@ export function simulateSpeedTest(car: CarPhysicsInput, test: SpeedTest, drawnLe
   return { totalTimeMs, trace, sectorTimesMs, distanceM: distance };
 }
 
+/** What the track's own air does to a car: thinner air is less drag to push
+ * and less oxygen to burn. Composes with whatever else the caller is doing to
+ * the run, which is why it comes back as modifiers rather than being applied. */
+export function altitudeModifiers(
+  car: CarPhysicsInput,
+  altitudeM: number | undefined,
+): { dragFactor: number; powerFactor: number } {
+  if (!altitudeM) return { dragFactor: 1, powerFactor: 1 };
+  return {
+    dragFactor: airDensityRatio(altitudeM),
+    powerFactor: altitudePowerFactor(car, altitudeM),
+  };
+}
+
 /** Runs whichever kind of thing the track is. */
 export function simulateTrack(
   car: CarPhysicsInput,
-  track: { segments: Segment[]; lengthM: number; speedTest?: SpeedTest },
+  track: { segments: Segment[]; lengthM: number; speedTest?: SpeedTest; altitudeM?: number },
 ): SimResult {
+  const air = altitudeModifiers(car, track.altitudeM);
   return track.speedTest
-    ? simulateSpeedTest(car, track.speedTest, track.lengthM)
-    : simulateRun(car, track.segments);
+    ? simulateSpeedTest(car, track.speedTest, track.lengthM, air)
+    : simulateRun(car, track.segments, air);
 }
 
 /** Interpolates the trace (which is sampled at fixed distance intervals) at an

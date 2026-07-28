@@ -12,6 +12,10 @@ export type Segment =
       radiusM: number;
       dir: TurnDirection;
       gradientPercent?: number;
+      /** How far the road is tipped into the corner, in degrees. Ovals carry
+       * their speed on this rather than on grip - see `bankedGripFactor`.
+       * Absent means flat, which every road circuit here is. */
+      bankingDegrees?: number;
     };
 
 /** A test against the speedometer rather than against a distance.
@@ -43,6 +47,10 @@ export interface TrackDefinition {
    * circuits, where the map should be the measured shape rather than the
    * segment list drawn back out. A sprint and a hillclimb have none. */
   outline?: [number, number][];
+  /** Height above sea level in metres, where it is high enough to matter. Thin
+   * air is less drag to push and less oxygen to burn - see `airDensityRatio`.
+   * Absent means sea level. */
+  altitudeM?: number;
 }
 
 export function trackLengthM(segments: Segment[]): number {

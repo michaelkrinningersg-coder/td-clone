@@ -1,5 +1,11 @@
 import type { CarData, TrackData } from "@/lib/data";
-import { brakingDecelMps2, simulateRun, solveLaunchLimitN, buildGearbox } from "@/lib/physics";
+import {
+  altitudeModifiers,
+  brakingDecelMps2,
+  simulateRun,
+  solveLaunchLimitN,
+  buildGearbox,
+} from "@/lib/physics";
 
 /** A race over a distance rather than a lap: two hundred and fifty kilometres
  * of a circuit, with tyres that go off, stops to change them, a driver who is
@@ -217,8 +223,16 @@ export function tyreGrip(used: number): number {
 
 export function carPace(car: CarData, track: TrackData): CarPace {
   const launchLimitN = solveLaunchLimitN(car, buildGearbox(car));
-  const run = (mods: Parameters<typeof simulateRun>[2]) =>
-    simulateRun(car, track.segments, { launchLimitN, ...mods }).totalTimeMs;
+  // The circuit's own air multiplies into whatever the race is doing to the
+  // car, rather than replacing it - a lap in the tow at Mexiko-Stadt is both.
+  const air = altitudeModifiers(car, track.altitudeM);
+  const run = (mods: { powerFactor?: number; gripFactor?: number; dragFactor?: number }) =>
+    simulateRun(car, track.segments, {
+      launchLimitN,
+      ...mods,
+      powerFactor: (mods.powerFactor ?? 1) * air.powerFactor,
+      dragFactor: (mods.dragFactor ?? 1) * air.dragFactor,
+    }).totalTimeMs;
   const base = run({});
   const lowGrip = run({ gripFactor: 0.9 });
   const lowPower = run({ powerFactor: 0.9 });

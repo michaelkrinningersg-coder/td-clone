@@ -301,16 +301,71 @@ const FUJI_GRADIENTS: GradientBand[] = [
   { from: 0.9, to: 1, percent: -2 },
 ];
 
+/** Height above sea level in metres, for the circuits high enough to matter.
+ *
+ * Set by hand for the same reason the gradients are: OpenStreetMap carries no
+ * heights, and Mexiko-Stadt on sea-level air would be a different circuit - it
+ * sits on four fifths of it. Everything left out runs at sea level, which below
+ * about 200 m is worth well under two percent of the air either way. */
+const ALTITUDE_M: Record<string, number> = {
+  "Mexiko-Stadt": 2232,
+  "Kyalami": 1753,
+  "Interlagos": 785,
+  "Red Bull Ring": 677,
+  "Las Vegas": 620,
+  "Madrid": 600,
+  "Fuji": 580,
+  "Nürburgring GP": 570,
+  "Watkins Glen": 500,
+  "Spa-Francorchamps": 400,
+  "Paul Ricard": 400,
+  "Mosport": 350,
+  "Laguna Seca": 300,
+  "Road Atlanta": 300,
+  "Norisring": 300,
+  "Road America": 280,
+  "Hungaroring": 250,
+  "Magny-Cours": 230,
+  "Indianapolis": 220,
+  "Indianapolis Oval": 220,
+  "Virginia International": 190,
+  "Moscow Raceway": 180,
+  "Monza": 162,
+  "Silverstone": 150,
+  "Estoril": 150,
+  "Lime Rock Park": 150,
+  // Below sea level, so the air is thicker than anywhere else on the calendar.
+  "Baku": -25,
+};
+
+/** How far the turns are tipped into the corner, in degrees.
+ *
+ * Only the ovals have any: a road circuit is flat to within a degree or two,
+ * and the surveyed centrelines carry no camber anyway. Indianapolis runs
+ * 9°12' through all four turns, which is the published figure; the trioval is
+ * ours to design, and twelve degrees is the shallow end of what a real
+ * superspeedway carries. Every corner on those laps is a banked one, so it goes
+ * on the track rather than on individual turns. */
+const BANKING_DEGREES: Record<string, number> = {
+  "Indianapolis Oval": 9.2,
+  "Trioval 4500 m": 12,
+};
+
 function circuit(name: string, outline: [number, number][], gradients?: GradientBand[]): TrackDefinition {
   const options = { gradients };
   // The surveyed way starts wherever the mapper began drawing, which is rarely
   // the start line; every one of these has its line on the longest straight.
   const fromLine = startAtLongestStraight(outline as Point[], options);
+  const banking = BANKING_DEGREES[name];
+  const segments = polylineToSegments(fromLine, options).map((seg) =>
+    banking && seg.kind === "corner" ? { ...seg, bankingDegrees: banking } : seg,
+  );
   return {
     name,
     type: "CIRCUIT",
-    segments: polylineToSegments(fromLine, options),
+    segments,
     outline: fromLine as [number, number][],
+    altitudeM: ALTITUDE_M[name],
   };
 }
 
@@ -385,8 +440,8 @@ function circleOutline(radiusM: number, points = 360): [number, number][] {
  * are wide enough that only the fastest cars have to lift, which makes the lap
  * a question of power against drag with one grip check per corner.
  *
- * Banking is not modelled, so these turns are flat - a real trioval would carry
- * far more speed through them. */
+ * The turns are banked twelve degrees (see BANKING_DEGREES), which is what
+ * keeps them from being the slow part of the lap. */
 function triovalOutline(lengthM: number, turnRadiusM: number, points = 600): [number, number][] {
   const turnArcM = (2 * Math.PI * turnRadiusM) / 3; // three 120-degree turns
   const straightM = (lengthM - 3 * turnArcM) / 3;
@@ -557,5 +612,9 @@ export const tracks: TrackDefinition[] = [
       ...switchbacks(52, 60, 68, 30, 7), // mid mountain section
       ...switchbacks(52, 60, 68, 22, 9), // upper / alpine section near the summit
     ],
+    // Starts at 2.862 m and finishes at 4.302 m. The mean is what the car
+    // breathes over the run, and it is thinner than anywhere else in the game:
+    // barely two thirds of the air at Monza.
+    altitudeM: 3580,
   },
 ];

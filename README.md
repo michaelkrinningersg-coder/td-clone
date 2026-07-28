@@ -115,6 +115,31 @@ Vorwärtslauf beschleunigt dazwischen.
 
 **Steigung.** Reine Physik (`g · sin θ`).
 
+**Luftdichte.** Jede Strecke bringt ihre eigene Höhe mit (Barometrische Höhenformel der
+Standardatmosphäre). Dünne Luft ist zweierlei: weniger Widerstand zu schieben — reine
+Physik — und weniger Sauerstoff zu verbrennen. Beim Motor ist die Sache nicht eindeutig,
+ein Sauger verliert etwa proportional, ein Turbo dreht den Ladedruck hoch und holt das
+meiste zurück. Der Datensatz sagt nicht, welcher Motor was ist: die Variantennamen nennen
+Aufladung für knapp ein Fünftel des Feldes und übergehen 699 Diesel, die alle aufgeladen
+sind. Also ein Exponent für alle (0,75, näher am Sauger, weil das Feld überwiegend einer
+ist) statt einer Rateroutine je Auto. Elektroautos verlieren nichts.
+
+Unterm Strich kostet Mexiko-Stadt (2.232 m, 80 % Luft) rund 2 % Rundenzeit, Kyalami
+(1.753 m) 1,2 %; Baku liegt 25 m **unter** dem Meer und ist einen Hauch schneller. Ein
+Elektroauto dreht das um und gewinnt in Mexiko-Stadt, weil es nur den Luftwiderstand
+geschenkt bekommt.
+
+**Überhöhung.** Auf einer geneigten Kurve trägt nicht mehr nur der Reifen die Querkraft,
+sondern auch ein Teil des Eigengewichts:
+
+```
+v² = g · r · (μ · cos θ + sin θ) / (cos θ − μ · sin θ)
+```
+
+Nur die Ovale haben welche — Indianapolis mit den realen 9°12′, das selbst gebaute Trioval
+mit 12°. Beide Runden fallen dadurch rund 6 % schneller aus. Die realen Rundkurse sind
+flach, und die vermessenen Mittellinien führen ohnehin keine Querneigung.
+
 ## Strecken
 
 `npm run import:tracks` lädt die **vermessenen Streckenmittellinien** und rechnet sie in
