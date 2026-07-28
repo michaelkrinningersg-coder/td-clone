@@ -280,6 +280,30 @@ Runde; ein Rennen hat Glück und Verkehr darin. Zwei Tests halten das fest: kein
 Rennmodus darf den Zeitspeicher auch nur erwähnen, und `physics.ts` darf nichts von Reifen,
 Safety Car oder Zufall wissen.
 
+## Wertungen filtern
+
+Gesamtwertung und Streckenrekorde teilen sich dieselben Filter, damit „bester
+frontgetriebener Diesel auf den Rundstrecken" auf beiden Tabellen dasselbe heißt.
+
+**Nach Strecke.** Drei Gruppen, aus der Geometrie gelesen statt per Namensliste vergeben:
+Sprints und Tempotests sind **Geradeaus**, ein Rundkurs ohne eine einzige Kurve unter 150 m
+Radius ist ein **Oval** (Indianapolis, das Trioval, die Kreisbahn — überall dort wird nie
+richtig gebremst), alles andere ist **Rundstrecke**. Angeboten werden die beiden Hälften,
+die der Vergleich braucht: Geradeaus & Ovale gegen Rundstrecken. Die Aufteilung ist
+lückenlos und überschneidungsfrei, was ein Test festhält.
+
+**Nach Auto.** Klasse (die sechs kg/PS-Klassen aus der Garage), Antrieb und Kraftstoff —
+alles Felder, die der Datensatz für jedes Auto führt. Die Filter greifen **vor** dem Bau der
+Wertung, nicht danach: Punkte und Durchschnittsplatz sind Plätze in einem Feld, also muss
+ein kleineres Feld sie ändern. Sonst stünde der „beste Diesel" mit Punkten da, die er hinter
+inzwischen ausgeblendeten Benzinern geholt hat. Genauso bei den Rekorden: mit gewählter
+Klasse ist die gezeigte Bestzeit die Klassenbestzeit, nicht der absolute Rekord mit
+versteckter Konkurrenz.
+
+Über der Rekordtabelle steht zusätzlich, **welche Marke wie viele Streckenrekorde hält** —
+eine Marke mit einem unschlagbaren Auto ist etwas anderes als eine, die überall vorn ist,
+und nur diese Tabelle trennt die beiden.
+
 ## Tests
 
 ```bash

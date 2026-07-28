@@ -15,6 +15,15 @@ import {
 import { timeStore, type TimeEntryData } from "@/lib/time-store";
 import { ResetButton } from "@/components/ResetButton";
 import { MakeStandings } from "@/components/MakeStandings";
+import { StandingsScope } from "@/components/StandingsScope";
+import {
+  carInScope,
+  carScopeIsEmpty,
+  trackInScope,
+  EMPTY_CAR_SCOPE,
+  type CarScope,
+  type TrackScope,
+} from "@/lib/standings-filters";
 
 const PODIUM = ["text-amber-300", "text-zinc-300", "text-orange-400"];
 
@@ -42,6 +51,8 @@ export function OverallStandings() {
   const [entries, setEntries] = useState<TimeEntryData[] | null>(null);
   const [order, setOrder] = useState<StandingsOrder>("points");
   const [query, setQuery] = useState("");
+  const [trackScope, setTrackScope] = useState<TrackScope>("all");
+  const [carScope, setCarScope] = useState<CarScope>(EMPTY_CAR_SCOPE);
   const deferredQuery = useDeferredValue(query);
   const [nonce, setNonce] = useState(0);
 
@@ -59,7 +70,21 @@ export function OverallStandings() {
     };
   }, [nonce]);
 
-  const standings = useMemo(() => (entries ? buildStandings(entries) : null), [entries]);
+  // The scopes bite before the standings are built, not after: points and
+  // average position are places within a field, so narrowing the field has to
+  // change them. Filtering a finished table would leave a "best diesel" holding
+  // the points it scored behind petrol cars that are no longer shown.
+  const scopedTracks = useMemo(() => tracks.filter((t) => trackInScope(t, trackScope)), [trackScope]);
+  const scopedEntries = useMemo(() => {
+    if (!entries) return null;
+    const allowed = new Set(scopedTracks.map((t) => t.id));
+    return entries.filter((e) => allowed.has(e.trackId) && carInScope(getCar(e.carId), carScope));
+  }, [entries, scopedTracks, carScope]);
+
+  const standings = useMemo(
+    () => (scopedEntries ? buildStandings(scopedEntries) : null),
+    [scopedEntries],
+  );
   // The total-time table only compares like with like, so it drops every car
   // that has not covered as much ground as the leaders.
   const ordered = useMemo(() => {
@@ -83,6 +108,12 @@ export function OverallStandings() {
       });
   }, [ordered, deferredQuery]);
   const tracksWithTimes = useMemo(
+    () => new Set(scopedEntries?.map((e) => e.trackId) ?? []).size,
+    [scopedEntries],
+  );
+  // The reset wipes everything, so it has to say so in the unfiltered numbers
+  // however the board is currently narrowed.
+  const allTracksWithTimes = useMemo(
     () => new Set(entries?.map((e) => e.trackId) ?? []).size,
     [entries],
   );
@@ -96,14 +127,33 @@ export function OverallStandings() {
     return <p className="mt-8 text-zinc-400">Lade Zeiten...</p>;
   }
 
+  const narrowed = trackScope !== "all" || !carScopeIsEmpty(carScope);
+
   if (standings.length === 0) {
     return (
-      <div className="mt-8 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-        <p className="text-zinc-400">Noch keine Zeiten gefahren.</p>
-        <Link href="/" className="mt-3 inline-block text-emerald-400 hover:text-emerald-300">
-          Strecke wählen und losfahren →
-        </Link>
-      </div>
+      <>
+        <StandingsScope
+          trackScope={trackScope}
+          onTrackScope={setTrackScope}
+          carScope={carScope}
+          onCarScope={setCarScope}
+        />
+        <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+          {narrowed ? (
+            <p className="text-zinc-400">
+              Kein Auto passt zu dieser Auswahl. Mit einem weiteren Filter oder auf einer anderen
+              Streckengruppe sieht es anders aus.
+            </p>
+          ) : (
+            <>
+              <p className="text-zinc-400">Noch keine Zeiten gefahren.</p>
+              <Link href="/" className="mt-3 inline-block text-emerald-400 hover:text-emerald-300">
+                Strecke wählen und losfahren →
+              </Link>
+            </>
+          )}
+        </div>
+      </>
     );
   }
 
@@ -112,11 +162,18 @@ export function OverallStandings() {
   return (
     <>
       <p className="mt-1 text-sm text-zinc-400">
-        {standings.length} {standings.length === 1 ? "Auto" : "Autos"} auf {tracksWithTimes} von {tracks.length}{" "}
-        Strecken.
+        {standings.length} {standings.length === 1 ? "Auto" : "Autos"} auf {tracksWithTimes} von{" "}
+        {scopedTracks.length} Strecken{trackScope === "all" ? "" : " dieser Gruppe"}.
         {rows.length !== ordered.length &&
           ` ${rows.length} davon ${rows.length === 1 ? "passt" : "passen"} zur Suche.`}
       </p>
+
+      <StandingsScope
+        trackScope={trackScope}
+        onTrackScope={setTrackScope}
+        carScope={carScope}
+        onCarScope={setCarScope}
+      />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-900 p-1">
@@ -148,8 +205,8 @@ export function OverallStandings() {
         <span className="ml-auto">
           <ResetButton
             label="Alle Ranglisten zurücksetzen"
-            question={`Alle ${entries!.length} Zeiten auf ${tracksWithTimes} ${
-              tracksWithTimes === 1 ? "Strecke" : "Strecken"
+            question={`Alle ${entries!.length} Zeiten auf ${allTracksWithTimes} ${
+              allTracksWithTimes === 1 ? "Strecke" : "Strecken"
             } löschen?`}
             confirmLabel="Alles zurücksetzen"
             onConfirm={async () => {
@@ -163,9 +220,9 @@ export function OverallStandings() {
 
       {order === "time" && uneven && (
         <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-          {mostTracks === tracks.length
-            ? `Nur die ${ordered.length} ${ordered.length === 1 ? "Auto, das" : "Autos, die"} alle ${tracks.length} Strecken gefahren ${ordered.length === 1 ? "ist" : "sind"}.`
-            : `Noch ist kein Auto alle ${tracks.length} Strecken gefahren. Gezeigt werden die ${ordered.length} mit den meisten, also je ${mostTracks} ${mostTracks === 1 ? "Strecke" : "Strecken"}.`}{" "}
+          {mostTracks === scopedTracks.length
+            ? `Nur die ${ordered.length} ${ordered.length === 1 ? "Auto, das" : "Autos, die"} alle ${scopedTracks.length} Strecken gefahren ${ordered.length === 1 ? "ist" : "sind"}.`
+            : `Noch ist kein Auto alle ${scopedTracks.length} Strecken gefahren. Gezeigt werden die ${ordered.length} mit den meisten, also je ${mostTracks} ${mostTracks === 1 ? "Strecke" : "Strecken"}.`}{" "}
           {standings.length - ordered.length} von {standings.length} Autos{" "}
           {standings.length - ordered.length === 1 ? "ist" : "sind"} ausgeblendet — eine Gesamtzeit über
           unterschiedlich viele Strecken wäre kein Vergleich.
