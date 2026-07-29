@@ -28,6 +28,7 @@ const car: CarData = {
   heightMm: 1435,
   brakeFront: "ventilated-disc",
   brakeRear: "disc",
+  cylinders: 4,
   wheelbaseMm: 2650,
   tyreWidthMm: 235,
   gearCount: 6,

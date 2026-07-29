@@ -54,6 +54,9 @@ export interface ImportedCar {
   brakeRear: BrakeKind;
   /** Tread width in mm, e.g. 225 from "225/50 R17". */
   tyreWidthMm: number;
+  /** How many cylinders, from "L4" or "V8". More of them fire per revolution,
+   * which is what lets a big engine hold a flat torque curve. */
+  cylinders: number;
   gearCount: number;
   manualGearbox: boolean;
   gearboxKind: GearboxKind;
@@ -68,6 +71,7 @@ export const SPEC_FIELDS = {
   brakeRear: ["Brakes Specs", "Rear:"],
   tyres: ["Tires Specs", "Tire Size:"],
   gearbox: ["Transmission Specs", "Gearbox:"],
+  cylinders: ["Engine Specs", "Cylinders:"],
   power: ["Engine Specs", "Power:"],
   torque: ["Engine Specs", "Torque:"],
   fuel: ["Engine Specs", "Fuel:"],
@@ -168,6 +172,18 @@ export function parseTyreWidthMm(raw: string | undefined): number | null {
   if (!m) return null;
   const width = Number.parseInt(m[1], 10);
   return width >= 100 && width <= 400 ? width : null;
+}
+
+/** "L4", "V8", "H6", "4 In-Line", "2-Rotor Rotary" - a layout letter and a
+ * count, in that order, whichever way the source spells it. Only the count is
+ * taken: how many times the engine fires per two revolutions is what decides
+ * how flat its torque curve can be, and whether the cylinders stand in a row or
+ * a vee does not change that. */
+export function parseCylinderCount(raw: string | undefined): number | null {
+  const m = (raw ?? "").match(/(\d+)/);
+  if (!m) return null;
+  const n = Number.parseInt(m[1], 10);
+  return n >= 1 && n <= 16 ? n : null;
 }
 
 /** What kind of gearbox it is, which is what decides how long a shift takes.
@@ -340,6 +356,7 @@ export function convertEngine(
   const brakeRear = parseBrake(spec(engine, SPEC_FIELDS.brakeRear));
   const tyreWidthMm = parseTyreWidthMm(spec(engine, SPEC_FIELDS.tyres));
   const gearbox = parseGearbox(spec(engine, SPEC_FIELDS.gearbox));
+  const cylinders = parseCylinderCount(spec(engine, SPEC_FIELDS.cylinders));
   // Fuel is free text, so require actual letters rather than a "-" placeholder.
   const rawFuel = spec(engine, SPEC_FIELDS.fuel)?.trim();
   const fuelType = rawFuel && /[a-z]/i.test(rawFuel) ? rawFuel : undefined;
@@ -359,6 +376,7 @@ export function convertEngine(
     !brakeFront ||
     !brakeRear ||
     tyreWidthMm === null ||
+    cylinders === null ||
     !gearbox
   ) {
     return null;
@@ -383,6 +401,7 @@ export function convertEngine(
     brakeFront,
     brakeRear,
     tyreWidthMm,
+    cylinders,
     gearCount: gearbox.gearCount,
     manualGearbox: gearbox.manual,
     gearboxKind: gearbox.kind,
@@ -535,6 +554,8 @@ export function isPlausible(car: ImportedCar): boolean {
     car.tyreWidthMm <= 400 &&
     car.gearCount >= 1 &&
     car.gearCount <= 10 &&
+    car.cylinders >= 1 &&
+    car.cylinders <= 16 &&
     car.dragCoefficient >= 0.15 &&
     car.dragCoefficient <= 0.8 &&
     car.year >= 1900 &&
