@@ -41,7 +41,7 @@ npx serve out
 [ilyasozkurt/automobile-models-and-specs](https://github.com/ilyasozkurt/automobile-models-and-specs)
 und übernimmt **nur** Autos, bei denen alle benötigten Werte vorhanden sind — Top-Speed,
 0–100 km/h, Leistung, Gewicht, Drehmoment, Antriebsart, Kraftstoffart, cw-Wert, Breite,
-Höhe, Radstand, Bremsen vorn und hinten, Reifenbreite und Getriebe. Fehlt einer davon, fliegt das
+Höhe, Radstand, Bremsen vorn und hinten, Reifenbreite, Zylinderzahl und Getriebe. Fehlt einer davon, fliegt das
 Auto raus statt geschätzt zu werden. Ergebnis landet in `src/data/cars.json` und ist
 eingecheckt, der Import muss also nicht laufen, um die App zu starten.
 
@@ -55,13 +55,13 @@ unter die kein Getriebe und kein Reifen kommt; ein BMW X1 mit 125 PS und 1.745 k
 liegt darunter. Zusammen fliegen 11 Autos raus, die sich nicht reparieren lassen, ohne
 einen Wert zu erfinden.
 
-Der Trichter von 30.066 Motorvarianten auf 5.456 Autos:
+Der Trichter von 30.066 Motorvarianten auf 5.451 Autos:
 
 | Schritt | bleiben |
 |---|---|
-| vollständige, plausible Daten | 16.859 |
-| Varianten mit identischen Fahrwerten zusammengefasst | 16.741 |
-| je Marke + Modell + Baujahr nur Einstiegs- und Topmotorisierung | 5.456 |
+| vollständige, plausible Daten | 16.850 |
+| Varianten mit identischen Fahrwerten zusammengefasst | 16.732 |
+| je Marke + Modell + Baujahr nur Einstiegs- und Topmotorisierung | 5.451 |
 
 Der letzte Schritt wirft die Zwischenmotorisierungen weg: die Quelle führt jede je
 verkaufte Version, etwa 46 Ausführungen des Volvo S80 von 2009. Gruppiert wird bewusst
@@ -161,9 +161,61 @@ Autos mit den schwachen Bremsen sind ohnehin die langsamen. Am heißesten wird e
 Madrid, Baku und Road America; auf den Ovalen und der Kreisbahn wird nie gebremst.
 
 **Bremsen und Kurven.** Verzögerung aus der verbauten Bremse (belüftete Scheibe / Scheibe /
-Trommel, vorn schwerer gewichtet). Kurventempo aus Radius, Reifenbreite je Tonne und
-Antriebsart. Ein Rückwärtslauf über die Strecke setzt daraus die Bremspunkte, ein
-Vorwärtslauf beschleunigt dazwischen.
+Trommel, vorn schwerer gewichtet). Kurventempo aus Radius, Gummi je Tonne und Antriebsart.
+Ein Rückwärtslauf über die Strecke setzt daraus die Bremspunkte, ein Vorwärtslauf
+beschleunigt dazwischen.
+
+**Lastempfindlichkeit.** Grip steigt nicht im Takt mit der Last: doppelt so viel Gummi unter
+dem Auto bringt deutlich weniger als doppelten Grip, weil der Reifen ohnehin schon walkt.
+Statt einer Geraden mit harter Klemmung steht dort jetzt ein Potenzgesetz mit Exponent 0,4 —
+und das ist die eigentliche Verbesserung, denn das Feld reicht von rund 300 mm Gummi je Tonne
+bis 1.200, und die Gerade lag an **beiden** Enden auf der Klemmung fest. Jeder zusätzliche
+Millimeter Lauffläche bringt jetzt ein bisschen weniger als der davor, und nirgends fällt
+etwas ab.
+
+Von den 0,4 sind etwa 0,15 echte Lastempfindlichkeit, wie sie in Reifendaten steht. Der Rest
+steht stellvertretend für die Mischung: Ein Auto mit viel Gummi je Tonne fährt in der Praxis
+auch die weichere Mischung, und dafür hat der Datensatz kein Feld. Die Kurvenspreizung des
+Feldes bleibt damit dort, wo reale Querbeschleunigung liegt — bei R = 120 m von 107 bis
+140 km/h.
+
+**Rollwiderstand.** Nicht mehr eine Zahl für alle. Ein schmaler harter Sparreifen rollt bei
+etwa 0,008, ein breiter weicher Sportreifen bei 0,015. Dieselbe Zahl, die den Grip bestimmt,
+bestimmt also auch, was das Rollen kostet — genau der Handel, den ein echter Reifen macht.
+Im Feld: Median 0,0110, Spanne 0,0093 bis 0,0148; Autos mit viel Gummi liegen bei 0,0122,
+Autos mit wenig bei 0,0096.
+
+**Kammscher Kreis.** Ein Reifen hat **ein** Reibungsbudget, nicht je eins pro Richtung. Was
+schon fürs Einlenken draufgeht, fehlt zum Bremsen und Beschleunigen:
+
+```
+längs = √(1 − quer²)
+```
+
+Der Rückwärtslauf löst das mit, weil die Anfahrgeschwindigkeit davon abhängt, wie hart
+gebremst werden kann, und das davon, wie schnell angekommen wird — zwei Durchgänge reichen.
+Nach unten begrenzt auf 15 %: ein Fahrer hält einen Rest zurück, und ein Auto, das mitten in
+einer Kurve kein einziges Newton mehr aufbringen darf, würde in einer langen Kurve
+ausrollen.
+
+Kostet im Median 0,07 % Rundenzeit, maximal 1,97 %, und genau dort am meisten, wo es soll:
+Pikes Peak +0,55 %, Monaco und der enge Stadtkurs je +0,38 %, Lime Rock +0,30 %. Auf
+Geraden und Tempotests exakt null. Dass es nicht mehr ist, liegt am Streckenmodell: Kurven
+haben konstanten Radius und enden abrupt, also gibt es kaum Kurvenausgang, an dem der Kreis
+greifen könnte.
+
+**Zylinderzahl.** `Cylinders` steht für 99,96 % der Varianten da ("L4", "V8", "H6"). Ein
+Dreizylinder zündet dreimal je zwei Umdrehungen und atmet durch drei kleine Kanäle, ein V12
+zwölfmal durch zwölf — kleinere Druckstöße, weniger Ansaugung, die sich selbst im Weg steht,
+und eine Drehmomentkurve, die über ein breiteres Band flacher liegt. Vier Zylinder sind die
+Feldmitte und bewegen nichts; jede Verdopplung zieht die Kurve ein Drittel Richtung breit,
+jede Halbierung ebenso weit in die andere Richtung.
+
+Bewusst unabhängig von der Nenndrehzahl: Ein V8 und ein Vierzylinder mit Spitze bei
+denselben 5.500/min sind nicht derselbe Motor, und bis hierher konnte das Modell sie
+überhaupt nicht auseinanderhalten. Bei 30 % der Nenndrehzahl stehen jetzt 88 % Drehmoment
+für einen Dreizylinder gegen 97 % für einen V8. Im Feld: 3.112 Vierzylinder, 1.134 Sechs-,
+666 Acht-, 226 Drei-, 151 Zwölfzylinder.
 
 **Steigung.** Reine Physik (`g · sin θ`).
 

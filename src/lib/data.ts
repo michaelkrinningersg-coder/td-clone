@@ -32,6 +32,8 @@ export interface CarData {
   brakeFront: BrakeKind;
   brakeRear: BrakeKind;
   tyreWidthMm: number;
+  /** How many cylinders - see `CarPhysicsInput`. */
+  cylinders: number;
   gearCount: number;
   manualGearbox: boolean;
   /** What kind of gearbox, which is what decides how long a shift takes. */

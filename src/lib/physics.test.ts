@@ -18,16 +18,19 @@ import {
   dragLimitedTopSpeedMps,
   effectiveTopSpeedMps,
   frontalAreaM2,
+  longitudinalShare,
+  rollingResistance,
   simulateRun,
   simulateSpeedTest,
   simulateTrack,
   solveLaunchGrip,
   tractionLimitedDriveN,
+  tyreGripFactor,
   wheelPowerW,
   type CarPhysicsInput,
 } from "./physics";
 import type { Segment, SpeedTest } from "./track-types";
-import { tracks } from "./data";
+import { cars, tracks } from "./data";
 
 const golfGti: CarPhysicsInput = {
   topSpeedKph: 250,
@@ -41,6 +44,7 @@ const golfGti: CarPhysicsInput = {
   heightMm: 1492,
   brakeFront: "ventilated-disc" as const,
   brakeRear: "disc" as const,
+  cylinders: 4,
   wheelbaseMm: 2650,
   tyreWidthMm: 225,
   gearCount: 6,
@@ -60,6 +64,7 @@ const veyron: CarPhysicsInput = {
   heightMm: 1204,
   brakeFront: "ventilated-disc" as const,
   brakeRear: "ventilated-disc" as const,
+  cylinders: 16,
   wheelbaseMm: 2650,
   tyreWidthMm: 365,
   gearCount: 7,
@@ -342,6 +347,119 @@ describe("braking", () => {
     const good = simulateRun({ ...golfGti, brakeFront: "ventilated-disc", brakeRear: "ventilated-disc" }, straight);
     const poor = simulateRun({ ...golfGti, brakeFront: "drum", brakeRear: "drum" }, straight);
     assert.equal(good.totalTimeMs, poor.totalTimeMs);
+  });
+});
+
+describe("rolling resistance", () => {
+  // A wide soft performance tyre rolls worse than a narrow hard eco one. The
+  // data has no compound, but a car on a lot of tread for its weight is on the
+  // sporting tyre - so the figure that buys it grip also costs it rolling.
+  it("costs a car on a lot of tread more than one on a little", () => {
+    const sporting = { ...golfGti, tyreWidthMm: 305, weightKg: 1300 };
+    const frugal = { ...golfGti, tyreWidthMm: 165, weightKg: 1600 };
+    assert.ok(rollingResistance(sporting) > rollingResistance(frugal));
+  });
+
+  it("stays inside what a road tyre actually rolls at", () => {
+    for (const car of cars.filter((_, i) => i % 200 === 0)) {
+      const crr = rollingResistance(car);
+      assert.ok(crr >= 0.008 && crr <= 0.016, `${car.id}: ${crr}`);
+    }
+  });
+
+  it("hands the sporting tyre a slower straight than its grip suggests", () => {
+    const straight: Segment[] = [{ kind: "straight", lengthM: 3000 }];
+    const sporting = { ...golfGti, tyreWidthMm: 305, weightKg: 1300 };
+    const same = { ...sporting, tyreWidthMm: 165 };
+    assert.ok(simulateRun(sporting, straight).totalTimeMs > simulateRun(same, straight).totalTimeMs);
+  });
+});
+
+describe("tyre load sensitivity", () => {
+  // Grip does not rise in step with load: doubling the tread under a car buys
+  // well under double the grip.
+  it("gives diminishing returns for more tread per tonne", () => {
+    const light = { ...golfGti, weightKg: 700 }; // twice the tread per tonne
+    const gain = tyreGripFactor(light) / tyreGripFactor(golfGti);
+    assert.ok(gain > 1, "more tread per tonne should still grip better");
+    assert.ok(gain < 2, `${gain.toFixed(2)}x for twice the tread is not diminishing`);
+  });
+
+  // What this replaces was a straight line pinned at a clamp for most of the
+  // interesting cars: 300 mm/t and 1.200 mm/t both sat on a bound.
+  it("has no cliff where the old straight line had one", () => {
+    const at = (mmPerTonne: number) =>
+      tyreGripFactor({ ...golfGti, weightKg: 1000, tyreWidthMm: mmPerTonne / 4 });
+    for (const [a, b] of [[300, 400] as const, [1000, 1100] as const]) {
+      assert.ok(at(b) > at(a), `${a} to ${b} mm/t should still move the grip`);
+    }
+  });
+
+  it("keeps the field's cornering spread where real lateral grip lives", () => {
+    const speeds = cars.map((c) => corneringSpeedCapMps(120, c));
+    const spread = Math.max(...speeds) / Math.min(...speeds);
+    assert.ok(spread > 1.2 && spread < 1.5, `${spread.toFixed(2)}x between the best and worst`);
+  });
+});
+
+describe("friction circle", () => {
+  it("gives everything to going straight and almost nothing at the limit", () => {
+    assert.equal(longitudinalShare(0), 1);
+    assert.ok(longitudinalShare(0.5) > longitudinalShare(0.9));
+    assert.ok(longitudinalShare(1) < 0.2, "a car at the cornering limit cannot also brake");
+    // Floored, or a long corner would coast the car to a standstill.
+    assert.ok(longitudinalShare(1) > 0, "a driver keeps a sliver in reserve");
+    assert.equal(longitudinalShare(5), longitudinalShare(1));
+  });
+
+  it("costs nothing on a straight and time on a corner-heavy lap", () => {
+    const straight: Segment[] = [{ kind: "straight", lengthM: 3000 }];
+    const twisty: Segment[] = Array.from({ length: 12 }, (_, i) =>
+      i % 2 === 0
+        ? ({ kind: "straight", lengthM: 200 } as const)
+        : ({ kind: "corner", lengthM: 120, radiusM: 45, dir: "right" } as const),
+    );
+    // Nothing to spend laterally, so the circle cannot bite: the trace has to
+    // reach the same drag-limited speed it always did.
+    const fastest = Math.max(...simulateRun(golfGti, straight).trace.map((p) => p.speedKph));
+    assert.ok(Math.abs(fastest - dragLimitedTopSpeedMps(golfGti) * 3.6) < 40);
+    // And a lap of corners has to be slower than the same distance straight.
+    assert.ok(simulateRun(golfGti, twisty).totalTimeMs > simulateRun(golfGti, straight).totalTimeMs);
+  });
+});
+
+describe("cylinders", () => {
+  // A V8 and an inline-four peaking at the same speed are not the same engine,
+  // and until the cylinder count arrived the model could not tell them apart.
+  it("gives the big engine a flatter curve at the same rated speed", () => {
+    const four = { ...golfGti, cylinders: 4 };
+    const eight = { ...golfGti, cylinders: 8 };
+    const rated = ratedSpeedRadS(four);
+    assert.equal(ratedSpeedRadS(four), ratedSpeedRadS(eight), "same rated speed by construction");
+    assert.ok(torqueFactor(eight, rated * 0.3) > torqueFactor(four, rated * 0.3));
+    assert.ok(torqueFactor(four, rated * 0.3) > torqueFactor({ ...golfGti, cylinders: 2 }, rated * 0.3));
+  });
+
+  // A high-revving engine has room left to be broadened; a lazy one is already
+  // as flat as the model gets, and more cylinders cannot make it flatter.
+  it("keeps going past a V8 on an engine that still has room", () => {
+    const screamer = { ...golfGti, powerPs: 240, torqueNm: 190 }; // ~9.000/min
+    const rated = ratedSpeedRadS(screamer);
+    const low = (cylinders: number) => torqueFactor({ ...screamer, cylinders }, rated * 0.3);
+    assert.ok(low(12) > low(8), "a twelve should be broader than an eight");
+    assert.ok(low(16) >= low(12));
+    assert.ok(low(8) > low(4));
+  });
+
+  it("still makes its most power at the rated speed, whatever it is", () => {
+    for (const cylinders of [2, 3, 4, 6, 8, 12, 16]) {
+      const car = { ...golfGti, cylinders };
+      const rated = ratedSpeedRadS(car);
+      const power = (x: number) => torqueFactor(car, rated * x) * x;
+      for (const x of [0.5, 0.8, 1.05]) {
+        assert.ok(power(x) <= power(1) + 1e-9, `${cylinders} cylinders: ${x} of rated beats the peak`);
+      }
+    }
   });
 });
 

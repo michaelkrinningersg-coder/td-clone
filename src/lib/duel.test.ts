@@ -19,6 +19,7 @@ const car = (over: Partial<CarData> & { id: string; make: string }): CarData => 
   heightMm: 1450,
   brakeFront: "ventilated-disc",
   brakeRear: "disc",
+  cylinders: 4,
   wheelbaseMm: 2650,
   tyreWidthMm: 225,
   gearCount: 6,

@@ -17,8 +17,10 @@ import {
   gearTopSpeedsMps,
   powerLimitedTopSpeedMps,
   ratedSpeedRadS,
+  rollingResistance,
   shiftTimeS,
   solveLaunchGrip,
+  treadMmPerTonne,
   simulateTrack,
   torqueFactor,
   wheelPowerW,
@@ -218,6 +220,7 @@ export function CarDetail({ car }: { car: CarData }) {
             <Row label="Bremse vorn" value={BRAKE_LABEL[car.brakeFront] ?? car.brakeFront} />
             <Row label="Bremse hinten" value={BRAKE_LABEL[car.brakeRear] ?? car.brakeRear} />
             <Row label="Reifenbreite" value={`${car.tyreWidthMm} mm`} />
+            <Row label="Zylinder" value={String(car.cylinders)} />
             <Row
               label="Getriebe"
               value={`${car.gearCount} Gänge`}
@@ -237,6 +240,16 @@ export function CarDetail({ car }: { car: CarData }) {
               label="Reifengrip"
               value={launchGrip.toFixed(2)}
               hint="auf die reale 0-100-Zeit gelöst"
+            />
+            <Row
+              label="Gummi je Tonne"
+              value={`${Math.round(treadMmPerTonne(car))} mm`}
+              hint="entscheidet Kurvengrip und Rollwiderstand"
+            />
+            <Row
+              label="Rollwiderstand"
+              value={rollingResistance(car).toFixed(4)}
+              hint="mehr Gummi rollt schlechter"
             />
             <Row
               label="Schaltzeit"

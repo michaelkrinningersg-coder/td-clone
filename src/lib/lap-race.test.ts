@@ -645,7 +645,10 @@ describe("nothing from a race reaches the records", () => {
     // only what it is told to do for one run, which is what keeps a lap time
     // the same today as it was yesterday.
     const physics = readFileSync(root + "src/lib/physics.ts", "utf8");
-    for (const forbidden of ["tyreGrip", "tyreLife", "safetyCar", "overtake", "Math.random"]) {
+    // Named exactly, not as substrings: physics.ts has its own tyre grip in
+    // `tyreGripFactor`, which is a property of the car and has nothing to do
+    // with a set going off over a stint.
+    for (const forbidden of ["tyreGrip(", "tyreLife", "safetyCar", "overtake", "Math.random"]) {
       assert.ok(!physics.includes(forbidden), `physics.ts mentions ${forbidden}`);
     }
   });

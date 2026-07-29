@@ -4,7 +4,18 @@ import type { BrakeKind, GearboxKind } from "./car-import";
 const G = 9.81;
 const KPH_TO_MPS = 1 / 3.6;
 const AIR_DENSITY = 1.225; // kg/m³ at sea level
-const ROLLING_RESISTANCE = 0.012; // shared constant; the data carries no tyre compound
+/** Rolling resistance is not one number for the whole field.
+ *
+ * A narrow, hard eco tyre rolls at about 0,008; a wide, soft performance tyre
+ * at 0,015, because there is more sidewall flexing and more rubber squirming.
+ * The data carries no compound, but it does carry how much tread a car hangs
+ * under how much weight - and a car on a lot of rubber for its mass is on the
+ * sporting tyre. So the same figure that decides its grip also decides what it
+ * costs to roll, which is the trade a real tyre makes. */
+const ROLLING_BASE = 0.011;
+const ROLLING_WIDTH_EXPONENT = 0.3;
+const ROLLING_MIN = 0.008;
+const ROLLING_MAX = 0.016;
 /** Frontal area is not in the data, so it is taken as a share of the bounding
  * box the width and height describe. 0.85 is the usual approximation. */
 const FRONTAL_AREA_FACTOR = 0.85;
@@ -34,6 +45,8 @@ export interface CarPhysicsInput {
   brakeFront: BrakeKind;
   brakeRear: BrakeKind;
   tyreWidthMm: number;
+  /** How many cylinders - what lets an engine hold a flat torque curve. */
+  cylinders: number;
   /** Distance between the axles, which sets how much load moves rearward under
    * acceleration - see `tractionLimitedDriveN`. */
   wheelbaseMm: number;
@@ -95,6 +108,20 @@ const SHIFT_TIME_S: Record<GearboxKind, number> = {
 /** How long one gearchange costs this car. */
 export function shiftTimeS(car: CarPhysicsInput): number {
   return SHIFT_TIME_S[car.gearboxKind];
+}
+
+/** Millimetres of tread the car carries per tonne it weighs. Around 600 is
+ * ordinary; a hot hatch is nearer 800, a heavy van under 400. Both the grip and
+ * the rolling resistance hang off this one figure. */
+export function treadMmPerTonne(car: CarPhysicsInput): number {
+  return (car.tyreWidthMm * 4) / (car.weightKg / 1000);
+}
+
+const REFERENCE_TREAD_MM_PER_TONNE = 600;
+
+export function rollingResistance(car: CarPhysicsInput): number {
+  const ratio = treadMmPerTonne(car) / REFERENCE_TREAD_MM_PER_TONNE;
+  return Math.max(ROLLING_MIN, Math.min(ROLLING_MAX, ROLLING_BASE * Math.pow(ratio, ROLLING_WIDTH_EXPONENT)));
 }
 
 export function frontalAreaM2(car: CarPhysicsInput): number {
@@ -258,8 +285,32 @@ function revviness(car: CarPhysicsInput): number {
   return Math.max(0, Math.min(1, (rpm - 3000) / 5000));
 }
 
+/** How flat the curve gets to be, from how many cylinders make it.
+ *
+ * A three-cylinder fires three times per two revolutions and breathes through
+ * three small ports; a V12 fires twelve times through twelve. More of them
+ * means smaller pressure pulses, less of the induction fighting itself, and a
+ * torque curve that lies flatter over a wider band - which is why a big
+ * multi-cylinder engine feels lazy and endless where a triple feels like it has
+ * one good moment. Four cylinders is the middle of the field and moves nothing;
+ * every doubling from there pulls the curve a third of the way towards broad,
+ * and every halving the same distance the other way.
+ *
+ * Independent of the rated speed on purpose. A V8 and an inline-four peaking at
+ * the same 5.500/min are not the same engine, and until now the model could not
+ * tell them apart at all. */
+const CYLINDER_REFERENCE = 4;
+const CYLINDER_BREADTH = 0.35;
+
+function cylinderBreadth(car: CarPhysicsInput): number {
+  // Doublings away from a four: a twin is one below, a V8 one above, a V16 two.
+  const doublings = Math.log2(Math.max(1, car.cylinders) / CYLINDER_REFERENCE);
+  return Math.max(-1, Math.min(2, doublings)) * CYLINDER_BREADTH;
+}
+
 function curveShape(car: CarPhysicsInput) {
-  const r = revviness(car);
+  // Positive breadth pulls towards BROAD, so it comes off the revviness.
+  const r = Math.max(0, Math.min(1, revviness(car) - cylinderBreadth(car)));
   const mix = (a: number, b: number) => a + (b - a) * r;
   return {
     offIdle: mix(BROAD.offIdle, PEAKY.offIdle),
@@ -347,7 +398,7 @@ export function powerLimitedTopSpeedMps(car: CarPhysicsInput): number {
   let high = 200; // 720 km/h, past anything here
   for (let i = 0; i < 50; i++) {
     const mid = (low + high) / 2;
-    const resistance = dragForceN(car, mid) + ROLLING_RESISTANCE * car.weightKg * G;
+    const resistance = dragForceN(car, mid) + rollingResistance(car) * car.weightKg * G;
     if (wheelPowerW(car) / mid > resistance) low = mid;
     else high = mid;
   }
@@ -426,7 +477,7 @@ export function dragLimitedTopSpeedMps(car: CarPhysicsInput): number {
   let high = 200; // 720 km/h, past anything here
   for (let i = 0; i < 50; i++) {
     const mid = (low + high) / 2;
-    const resistance = dragForceN(car, mid) + ROLLING_RESISTANCE * car.weightKg * G;
+    const resistance = dragForceN(car, mid) + rollingResistance(car) * car.weightKg * G;
     if (driveForceN(car, gearbox, mid) > resistance) low = mid;
     else high = mid;
   }
@@ -445,18 +496,61 @@ export function effectiveTopSpeedMps(car: CarPhysicsInput): number {
 
 /** Cornering grip. The friction constant is shared by every car; what varies is
  * real: how much tyre is under how much car, and which wheels drive. */
+/** Grip does not rise in step with load. Double what a tyre carries and it
+ * gives back well under double the grip - the rubber is already deforming, and
+ * the extra load buys less contact than the first lot did.
+ *
+ * Written as an exponent on tread per tonne, which is the same figure inverted:
+ * a car with twice the rubber under it works each tyre at half the load. Two
+ * things are rolled into the one exponent, and it is worth saying which. About
+ * 0,15 of it is load sensitivity proper, the number tyre data gives. The rest
+ * stands in for compound: a car carrying a lot of tread for its weight is, in
+ * practice, also on softer rubber, and the dataset has no field that says so.
+ *
+ * What this replaces is a straight line with a hard clamp at either end - and
+ * the clamp was doing the work, because the field runs from about 300 mm of
+ * tread per tonne to 1.200 and the line left both ends pinned. A power law has
+ * the shape the physics has: every extra millimetre of tread is worth a little
+ * less than the last, and nothing falls off a cliff. */
+const TYRE_LOAD_EXPONENT = 0.4;
+/** Even so, nothing in the field is a slick and nothing is a caster. */
+const TYRE_GRIP_MIN = 0.75;
+const TYRE_GRIP_MAX = 1.35;
+
+/** How much grip this car's tyres give, relative to a car carrying an ordinary
+ * amount of tread for its weight. */
+export function tyreGripFactor(car: CarPhysicsInput): number {
+  const ratio = treadMmPerTonne(car) / REFERENCE_TREAD_MM_PER_TONNE;
+  return Math.max(TYRE_GRIP_MIN, Math.min(TYRE_GRIP_MAX, Math.pow(ratio, TYRE_LOAD_EXPONENT)));
+}
+
 export function corneringSpeedCapMps(
   radiusM: number,
   car: CarPhysicsInput,
   bankingDegrees = 0,
 ): number {
   const baseMu = 0.95;
-  const tyreMmPerTonne = (car.tyreWidthMm * 4) / (car.weightKg / 1000);
-  // Around 600 mm of tread per tonne is ordinary; more grips better.
-  const tyreFactor = Math.max(0.75, Math.min(1.35, tyreMmPerTonne / 600));
   const drivetrainFactor = car.drivetrain === "AWD" ? 1.05 : car.drivetrain === "FWD" ? 0.95 : 1.0;
-  const mu = baseMu * tyreFactor * drivetrainFactor;
+  const mu = baseMu * tyreGripFactor(car) * drivetrainFactor;
   return Math.sqrt(bankedGripFactor(mu, bankingDegrees) * G * radiusM);
+}
+
+/** What is left for going or stopping when some of the grip is already being
+ * spent on turning - Kamm's circle.
+ *
+ * A tyre has one friction budget, not one for each direction. `lateralUse` is
+ * the share of the cornering limit the car is running at, so at the apex of a
+ * corner taken flat out there is nothing left to brake or accelerate with, and
+ * on a straight there is all of it.
+ *
+ * Floored rather than taken to zero: a driver holds a sliver in reserve, and a
+ * car that could not put down a single newton mid-corner would coast to a stop
+ * in a long one. */
+const MIN_LONGITUDINAL_SHARE = 0.15;
+
+export function longitudinalShare(lateralUse: number): number {
+  const u = Math.max(0, Math.min(1, lateralUse));
+  return Math.max(MIN_LONGITUDINAL_SHARE, Math.sqrt(1 - u * u));
 }
 
 /** What a banked corner is worth, as the factor replacing plain friction.
@@ -537,12 +631,16 @@ function accelerationMps2(
   gradientPercent: number,
   powerFactor = 1,
   dragFactor = 1,
+  lateralUse = 0,
 ): number {
   const dragN = dragForceN(car, speedMps) * dragFactor;
-  const rollN = ROLLING_RESISTANCE * car.weightKg * G;
+  const rollN = rollingResistance(car) * car.weightKg * G;
   const gradeN = car.weightKg * G * Math.sin(Math.atan(gradientPercent / 100));
   const resistanceN = dragN + rollN + gradeN;
-  const tractionN = tractionLimitedDriveN(car, launchGrip, resistanceN);
+  // Grip already spent on turning is not available to pull with, so a car
+  // leaning on its tyres mid-corner cannot use all of its engine.
+  const grip = launchGrip * longitudinalShare(lateralUse);
+  const tractionN = tractionLimitedDriveN(car, grip, resistanceN);
   const driveN = Math.min(tractionN, driveForceN(car, gearbox, speedMps) * powerFactor);
   return (driveN - resistanceN) / car.weightKg;
 }
@@ -673,7 +771,18 @@ export function simulateRun(
     // car a braking point instead of shedding speed instantly at the corner.
     const caps = [...baseLimits];
     for (let i = steps - 2; i >= 0; i--) {
-      const reachable = Math.sqrt(caps[i + 1] * caps[i + 1] + 2 * decels[i] * stepM);
+      // How fast the car may arrive here depends on how hard it can brake, and
+      // that depends on how much of the grip the corner is already using at
+      // whatever speed it arrives at. Two rounds settle it to well inside a
+      // tenth of a km/h; on a straight the first round is already the answer.
+      let reachable = Math.sqrt(caps[i + 1] * caps[i + 1] + 2 * decels[i] * stepM);
+      if (Number.isFinite(baseLimits[i])) {
+        for (let pass = 0; pass < 2; pass++) {
+          const use = Math.min(1, (reachable / baseLimits[i]) ** 2);
+          const braking = decels[i] * longitudinalShare(use);
+          reachable = Math.sqrt(caps[i + 1] * caps[i + 1] + 2 * braking * stepM);
+        }
+      }
       caps[i] = Math.min(caps[i], reachable);
     }
 
@@ -693,7 +802,8 @@ export function simulateRun(
       if (v > limit) v = limit; // braking already accounted for by the backward pass
       speeds[i] = v;
 
-      const a = accelerationMps2(car, gearbox, v, launchGrip, grades[i], powerFactor, dragFactor);
+      const lateralUse = Number.isFinite(baseLimits[i]) ? Math.min(1, (v / baseLimits[i]) ** 2) : 0;
+      const a = accelerationMps2(car, gearbox, v, launchGrip, grades[i], powerFactor, dragFactor, lateralUse);
       const vNext = Math.max(1, Math.min(limit, Math.sqrt(Math.max(0, v * v + 2 * a * stepM))));
       const vAvg = (v + vNext) / 2;
       t += stepM / vAvg;
