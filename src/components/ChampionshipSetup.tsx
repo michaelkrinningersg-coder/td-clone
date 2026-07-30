@@ -15,7 +15,7 @@ import { carMatches } from "@/components/CarList";
 const CALENDAR_SIZE = 10;
 
 /** Cars one marque may have on the grid when the field is drawn. */
-const MAX_PER_MAKE = 2;
+const MAX_PER_MAKE = 6;
 
 /** Building a championship: thirty cars and a calendar.
  *
@@ -32,9 +32,9 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [onlyUnfinished, setOnlyUnfinished] = useState(true);
-  // Fifty cars drawn out of five thousand would otherwise put eleven BMWs on
-  // the grid, which is a manufacturer test and not a championship.
-  const [twoPerMake, setTwoPerMake] = useState(true);
+  // A hundred cars drawn out of five thousand would otherwise let one marque
+  // take fifteen places, which is a manufacturer test and not a championship.
+  const [capPerMake, setCapPerMake] = useState(true);
 
   // Which tracks each car has already been round. Loaded once: a championship
   // is set up in one sitting, and nothing here writes times.
@@ -112,7 +112,7 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
         count: CHAMPIONSHIP_SIZE,
         classId,
         excludeIds: onlyUnfinished ? completeIds : undefined,
-        maxPerMake: twoPerMake ? MAX_PER_MAKE : undefined,
+        maxPerMake: capPerMake ? MAX_PER_MAKE : undefined,
       }).map((c) => c.id),
     );
   }
@@ -217,8 +217,8 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
         <label className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
           <input
             type="checkbox"
-            checked={twoPerMake}
-            onChange={(e) => setTwoPerMake(e.target.checked)}
+            checked={capPerMake}
+            onChange={(e) => setCapPerMake(e.target.checked)}
             className="h-3.5 w-3.5 accent-emerald-500"
           />
           Höchstens {MAX_PER_MAKE} Autos je Marke
