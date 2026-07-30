@@ -102,6 +102,29 @@ describe("randomGrid", () => {
     assert.equal(picked.length, 5);
   });
 
+  // The championship draws its field from the cars that have not already done
+  // every track on the calendar. When that leaves fewer cars than the field
+  // wants, the right answer is a shorter field - never a repeat, never a car
+  // that has nothing left to prove, and never a refusal to start.
+  it("returns a shorter field when the exclusions leave too few cars", () => {
+    const spare = new Set(pool.slice(2).map((c) => c.id));
+    const picked = randomGrid(pool, { count: 100, excludeIds: spare, random: sequence([0]) });
+    assert.equal(picked.length, 2);
+    assert.equal(new Set(picked.map((c) => c.id)).size, 2, "no car drawn twice");
+    assert.ok(!picked.some((c) => spare.has(c.id)), "no excluded car sneaks back in");
+  });
+
+  it("returns a shorter field under the marque cap too, rather than repeating", () => {
+    const picked = randomGrid(pool, { count: 100, maxPerMake: 1, random: sequence([0]) });
+    assert.ok(picked.length < 100);
+    assert.equal(new Set(picked.map((c) => c.id)).size, picked.length);
+  });
+
+  it("comes back empty rather than failing when nothing is left", () => {
+    const everything = new Set(pool.map((c) => c.id));
+    assert.deepEqual(randomGrid(pool, { count: 100, excludeIds: everything }), []);
+  });
+
   it("combines the rules", () => {
     const picked = randomGrid(pool, {
       count: 5,
