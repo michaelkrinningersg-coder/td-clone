@@ -1,5 +1,5 @@
 /** How many cars make up a championship field. */
-export const CHAMPIONSHIP_SIZE = 50;
+export const CHAMPIONSHIP_SIZE = 100;
 
 /** Points for a placing in a championship round.
  *
