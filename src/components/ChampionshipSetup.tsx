@@ -15,7 +15,7 @@ import { carMatches } from "@/components/CarList";
 const CALENDAR_SIZE = 10;
 
 /** Cars one marque may have on the grid when the field is drawn. */
-const MAX_PER_MAKE = 6;
+const MAX_PER_MAKE = 12;
 
 /** Building a championship: thirty cars and a calendar.
  *
@@ -32,8 +32,10 @@ export function ChampionshipSetup({ onStart }: { onStart: (carIds: string[], tra
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [onlyUnfinished, setOnlyUnfinished] = useState(true);
-  // A hundred cars drawn out of five thousand would otherwise let one marque
-  // take fifteen places, which is a manufacturer test and not a championship.
+  // A hundred cars drawn out of five thousand let one marque take up to
+  // thirteen places when nothing stops it. At twelve the cap only binds in one
+  // field in ten, so this toggle is close to decorative now - it earns its
+  // keep again as soon as the limit is lowered.
   const [capPerMake, setCapPerMake] = useState(true);
 
   // Which tracks each car has already been round. Loaded once: a championship
