@@ -51,6 +51,8 @@ export function trackInScope(
 /** What a board may be narrowed to on the car side. Every one of these reads a
  * field the dataset carries for every car - nothing is inferred. */
 export interface CarScope {
+  /** Marque exactly as the field spells it, or "" for all. */
+  make: string;
   /** Class id from `carClasses`, or "" for all. */
   classId: string;
   /** "FWD" | "RWD" | "AWD", or "" for all. */
@@ -59,12 +61,13 @@ export interface CarScope {
   fuelType: string;
 }
 
-export const EMPTY_CAR_SCOPE: CarScope = { classId: "", drivetrain: "", fuelType: "" };
+export const EMPTY_CAR_SCOPE: CarScope = { make: "", classId: "", drivetrain: "", fuelType: "" };
 
 export function carInScope(car: CarData | undefined, scope: CarScope): boolean {
   // A time whose car is no longer in the field cannot be checked against any of
   // these, so it drops out as soon as one of them is set.
-  if (!car) return !scope.classId && !scope.drivetrain && !scope.fuelType;
+  if (!car) return carScopeIsEmpty(scope);
+  if (scope.make && car.make !== scope.make) return false;
   if (scope.classId && carClassOf(car).id !== scope.classId) return false;
   if (scope.drivetrain && car.drivetrain !== scope.drivetrain) return false;
   if (scope.fuelType && car.fuelType !== scope.fuelType) return false;
@@ -72,7 +75,13 @@ export function carInScope(car: CarData | undefined, scope: CarScope): boolean {
 }
 
 export function carScopeIsEmpty(scope: CarScope): boolean {
-  return !scope.classId && !scope.drivetrain && !scope.fuelType;
+  return !scope.make && !scope.classId && !scope.drivetrain && !scope.fuelType;
+}
+
+/** Marques present in the field, alphabetically - the picker should offer what
+ * exists rather than a list somebody wrote down. */
+export function makesIn(cars: readonly CarData[]): string[] {
+  return [...new Set(cars.map((c) => c.make))].sort((a, b) => a.localeCompare(b));
 }
 
 /** Fuel types actually present in the field, most common first - the picker

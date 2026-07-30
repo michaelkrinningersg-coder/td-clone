@@ -9,6 +9,7 @@ import {
   fuelTypesIn,
   carRecordCounts,
   makeRecordCounts,
+  makesIn,
   trackGroupOf,
   trackInScope,
   TRACK_SCOPES,
@@ -81,6 +82,12 @@ describe("carInScope", () => {
     for (const c of cars.slice(0, 50)) assert.ok(carInScope(c, EMPTY_CAR_SCOPE));
   });
 
+  it("filters on marque", () => {
+    assert.ok(carInScope(car, { ...EMPTY_CAR_SCOPE, make: car.make }));
+    assert.ok(!carInScope(car, { ...EMPTY_CAR_SCOPE, make: "Trabant" }));
+    assert.ok(!carScopeIsEmpty({ ...EMPTY_CAR_SCOPE, make: car.make }));
+  });
+
   it("filters on class, drivetrain and fuel", () => {
     const cls = carClassOf(car).id;
     assert.ok(carInScope(car, { ...EMPTY_CAR_SCOPE, classId: cls }));
@@ -93,6 +100,7 @@ describe("carInScope", () => {
 
   it("combines the three rather than treating them as alternatives", () => {
     const scope = {
+      make: car.make,
       classId: carClassOf(car).id,
       drivetrain: car.drivetrain,
       fuelType: car.fuelType,
@@ -121,6 +129,19 @@ describe("fuelTypesIn", () => {
 
   it("says nothing about an empty field", () => {
     assert.deepEqual(fuelTypesIn([]), []);
+  });
+});
+
+describe("makesIn", () => {
+  it("lists the marques the field actually holds, alphabetically", () => {
+    const makes = makesIn(cars);
+    assert.equal(new Set(makes).size, makes.length);
+    assert.deepEqual(makes, [...makes].sort((a, b) => a.localeCompare(b)));
+    for (const car of cars) assert.ok(makes.includes(car.make));
+  });
+
+  it("says nothing about an empty field", () => {
+    assert.deepEqual(makesIn([]), []);
   });
 });
 

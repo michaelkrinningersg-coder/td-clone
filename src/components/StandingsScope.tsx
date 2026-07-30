@@ -6,6 +6,7 @@ import { carClasses, classRangeLabel } from "@/lib/classes";
 import {
   carScopeIsEmpty,
   fuelTypesIn,
+  makesIn,
   TRACK_SCOPES,
   type CarScope,
   type TrackScope,
@@ -51,6 +52,7 @@ interface Props {
  * mean the same thing on both, or comparing them would be nonsense. */
 export function StandingsScope({ trackScope, onTrackScope, carScope, onCarScope }: Props) {
   const fuels = useMemo(() => fuelTypesIn(cars), []);
+  const makes = useMemo(() => makesIn(cars), []);
   const narrowed = !carScopeIsEmpty(carScope);
 
   return (
@@ -80,6 +82,20 @@ export function StandingsScope({ trackScope, onTrackScope, carScope, onCarScope 
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={carScope.make}
+          onChange={(e) => onCarScope({ ...carScope, make: e.target.value })}
+          aria-label="Nach Marke filtern"
+          className={SELECT}
+        >
+          <option value="">Alle Marken</option>
+          {makes.map((make) => (
+            <option key={make} value={make}>
+              {make}
+            </option>
+          ))}
+        </select>
+
         <select
           value={carScope.classId}
           onChange={(e) => onCarScope({ ...carScope, classId: e.target.value })}
@@ -125,7 +141,7 @@ export function StandingsScope({ trackScope, onTrackScope, carScope, onCarScope 
         {narrowed && (
           <button
             type="button"
-            onClick={() => onCarScope({ classId: "", drivetrain: "", fuelType: "" })}
+            onClick={() => onCarScope({ make: "", classId: "", drivetrain: "", fuelType: "" })}
             className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-400 transition hover:border-zinc-600 hover:text-white"
           >
             Filter zurücksetzen
