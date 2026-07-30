@@ -105,3 +105,30 @@ export function makeRecordCounts(
     .map(([make, records]) => ({ make, records }))
     .sort((a, b) => b.records - a.records || a.make.localeCompare(b.make));
 }
+
+export interface CarRecordCount<T> {
+  car: T;
+  records: number;
+}
+
+/** Which cars hold the most track records, most first.
+ *
+ * The marque tally answers "which badge is quickest"; this answers "which
+ * single car is". They are not the same story - a marque can lead on breadth
+ * while one rival car outright holds more boards than anything it builds.
+ *
+ * Generic in the car so the ranking does not have to know what a car is: it
+ * counts by identity and hands back whatever it was given. Ties break on the
+ * id, so the podium does not reshuffle itself between renders. */
+export function carRecordCounts<T extends { id: string }>(
+  records: readonly { car: T | undefined }[],
+): CarRecordCount<T>[] {
+  const counts = new Map<string, { car: T; records: number }>();
+  for (const { car } of records) {
+    if (!car) continue;
+    const entry = counts.get(car.id);
+    if (entry) entry.records++;
+    else counts.set(car.id, { car, records: 1 });
+  }
+  return [...counts.values()].sort((a, b) => b.records - a.records || a.car.id.localeCompare(b.car.id));
+}

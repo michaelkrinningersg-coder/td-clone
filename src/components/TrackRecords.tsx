@@ -9,6 +9,7 @@ import { timeStore, type TimeEntryData } from "@/lib/time-store";
 import { StandingsScope } from "@/components/StandingsScope";
 import {
   carInScope,
+  carRecordCounts,
   carScopeIsEmpty,
   makeRecordCounts,
   trackGroupOf,
@@ -24,6 +25,15 @@ const GROUP_LABEL: Record<TrackGroup, string> = {
   oval: "Oval",
   circuit: "Rundstrecke",
 };
+
+/** Gold, silver, bronze - and the order they stand in, so the winner is in the
+ * middle and a step higher, the way a podium looks. */
+const PODIUM = [
+  { place: 1, ring: "border-amber-400/60", text: "text-amber-300", lift: "sm:-mt-4" },
+  { place: 2, ring: "border-zinc-400/50", text: "text-zinc-300", lift: "" },
+  { place: 3, ring: "border-orange-500/50", text: "text-orange-400", lift: "sm:mt-3" },
+];
+const PODIUM_ORDER = [1, 0, 2];
 
 /** Every track with its record holder, in one place. The per-track boards
  * answer "who is quickest here"; this answers "where have I actually been".
@@ -66,6 +76,7 @@ export function TrackRecords() {
   }, [scopedTracks, boards, carScope]);
 
   const makes = useMemo(() => makeRecordCounts(rows.map((r) => ({ make: r.car?.make }))), [rows]);
+  const topCars = useMemo(() => carRecordCounts(rows.map((r) => ({ car: r.car }))).slice(0, 3), [rows]);
   const driven = rows.filter((r) => r.best !== null).length;
   const narrowed = trackScope !== "all" || !carScopeIsEmpty(carScope);
 
@@ -84,6 +95,45 @@ export function TrackRecords() {
           ? "Lade Zeiten..."
           : `${driven} von ${rows.length} Strecken haben eine Bestzeit${narrowed ? " in dieser Auswahl" : ""}.`}
       </p>
+
+      {topCars.length > 0 && (
+        <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Die meisten Streckenrekorde
+          </h3>
+          <ol className="mt-4 grid gap-3 sm:grid-cols-3">
+            {PODIUM_ORDER.filter((i) => i < topCars.length).map((i) => {
+              const { car, records } = topCars[i];
+              const style = PODIUM[i];
+              return (
+                <li
+                  key={car.id}
+                  className={`flex flex-col items-center gap-1 rounded-xl border ${style.ring} bg-zinc-900 px-3 py-4 text-center ${style.lift}`}
+                >
+                  <span className={`font-mono text-xs font-bold ${style.text}`}>{style.place}.</span>
+                  <span
+                    className="text-xs font-medium uppercase tracking-wide"
+                    style={{ color: brandColor(car.make) }}
+                  >
+                    {car.make}
+                  </span>
+                  <Link
+                    href={`/car?id=${encodeURIComponent(car.id)}`}
+                    className="text-sm text-white hover:text-emerald-400"
+                    title={`Alle Daten zum ${car.make} ${car.model}`}
+                  >
+                    {car.model} <span className="text-zinc-600">’{String(car.year).slice(2)}</span>
+                  </Link>
+                  <span className={`mt-1 font-mono text-2xl font-bold ${style.text}`}>{records}</span>
+                  <span className="text-xs text-zinc-600">
+                    {records === 1 ? "Rekord" : "Rekorde"}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
 
       {makes.length > 0 && (
         <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">

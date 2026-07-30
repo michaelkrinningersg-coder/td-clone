@@ -7,6 +7,7 @@ import {
   carScopeIsEmpty,
   EMPTY_CAR_SCOPE,
   fuelTypesIn,
+  carRecordCounts,
   makeRecordCounts,
   trackGroupOf,
   trackInScope,
@@ -160,5 +161,69 @@ describe("makeRecordCounts", () => {
       .map((c: CarData) => ({ make: c.make }));
     const total = makeRecordCounts(sample).reduce((sum, c) => sum + c.records, 0);
     assert.equal(total, sample.length);
+  });
+});
+
+describe("carRecordCounts", () => {
+  const c = (id: string) => ({ id });
+
+  it("ranks the cars holding the most records first", () => {
+    const counts = carRecordCounts([
+      { car: c("gt3") },
+      { car: c("m3") },
+      { car: c("gt3") },
+      { car: c("gt3") },
+      { car: c("m3") },
+      { car: c("golf") },
+    ]);
+    assert.deepEqual(
+      counts.map((r) => [r.car.id, r.records]),
+      [
+        ["gt3", 3],
+        ["m3", 2],
+        ["golf", 1],
+      ],
+    );
+  });
+
+  // The podium is rendered from the first three, so a wobbling tie would make
+  // it reshuffle itself between renders for no reason.
+  it("breaks a tie on the id so the podium does not wobble", () => {
+    const first = carRecordCounts([{ car: c("zonda") }, { car: c("alpine") }]);
+    const second = carRecordCounts([{ car: c("alpine") }, { car: c("zonda") }]);
+    assert.deepEqual(
+      first.map((r) => r.car.id),
+      ["alpine", "zonda"],
+    );
+    assert.deepEqual(first, second);
+  });
+
+  it("ignores tracks nobody has driven", () => {
+    assert.deepEqual(carRecordCounts([{ car: undefined }, { car: c("a") }]), [
+      { car: { id: "a" }, records: 1 },
+    ]);
+    assert.deepEqual(carRecordCounts([]), []);
+  });
+
+  it("accounts for every record it was given", () => {
+    const sample = cars.slice(0, 40).map((car) => ({ car }));
+    const total = carRecordCounts(sample).reduce((sum, r) => sum + r.records, 0);
+    assert.equal(total, sample.length);
+  });
+
+  // The marque tally and the car podium are different questions: a marque can
+  // lead on breadth while a single rival car holds more boards outright.
+  it("can disagree with the marque tally about who is on top", () => {
+    const records = [
+      { car: { id: "gt3", make: "Porsche" } },
+      { car: { id: "gt3", make: "Porsche" } },
+      { car: { id: "gt3", make: "Porsche" } },
+      { car: { id: "a4", make: "Audi" } },
+      { car: { id: "a6", make: "Audi" } },
+      { car: { id: "a8", make: "Audi" } },
+      { car: { id: "tt", make: "Audi" } },
+    ];
+    assert.equal(makeRecordCounts(records.map((r) => ({ make: r.car.make })))[0].make, "Audi");
+    assert.equal(carRecordCounts(records)[0].car.id, "gt3");
   });
 });
