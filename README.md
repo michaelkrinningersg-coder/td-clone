@@ -14,6 +14,47 @@ nur die Ablage der Rundenzeiten unterscheidet sich.
 | Autos & Strecken | `src/data/` | `src/data/` |
 | Physik | im Browser | im Browser |
 
+### Warum die Zeiten nicht im Repo liegen
+
+Naheliegende Idee, geht aber nicht: GitHub Pages liefert nur statische Dateien aus. Eine
+SQLite-Datei im Repo könnte der Browser per WASM zwar **lesen**, aber jeder Schreibvorgang
+müsste über die GitHub-API zurück — und der dafür nötige Token wäre für jeden Besucher
+sichtbar. Eine Repo-Datenbank wäre also eine schreibgeschützte Bestenliste, keine, in die
+gefahren werden kann.
+
+Stattdessen ist der Browser-Speicher so weit geschrumpft, dass er das ganze Feld fasst —
+siehe unten.
+
+### Wie die Zeiten im Browser abgelegt sind
+
+`src/lib/time-codec.ts`. Der Browser gibt einer Seite rund fünf Megabyte, und das gesamte
+Feld auf allen Strecken sind 5.451 × 70 = 381.570 Zeiten. Als JSON-Objekte wären das 68 MB
+— das Kontingent war nach etwa 28 Meisterschaften voll, mit einem `setItem`-Fehler mitten im
+Lauf.
+
+Zwei Ideen erledigen das. Die Auto- und Streckenkennungen sind der Großteil einer Zeit — ein
+Slug wie `porsche-cayenne-turbo-s-955-2006-4-5l-v8-6at` sind fünfzig Zeichen, wiederholt für
+jede Strecke, die das Auto gefahren ist —, also steht jede Kennung **einmal** in einem
+Wörterbuch und wird danach über eine Nummer angesprochen. Und die Nummern liegen als Bytes
+statt als JSON: **6 Byte je Zeit** (Auto 2, Strecke 1, Millisekunden 3).
+
+| | Zeiten | Speicher |
+|---|---|---|
+| eine Meisterschaft (100 Autos × 10 Strecken) | 1.000 | 49 KiB |
+| zehn Meisterschaften | 10.000 | 303 KiB |
+| **das gesamte Feld auf allen Strecken** | **381.570** | **3,2 MB** |
+
+Das Wörterbuch amortisiert sich: 50 Zeichen je Zeit bei tausend Einträgen, 8,6 bei
+Volllast. Bewusst das Wörterbuch und nicht die Position eines Autos im Feld — die wäre noch
+kleiner, aber das Feld wird bei jedem Reimport neu gebaut (viermal allein in dieser
+Entwicklung), und jede gespeicherte Zeit zeigte danach auf das falsche Auto. Kennungen
+wandern nicht.
+
+Ältere Ablageformate werden weiter gelesen und beim nächsten Schreiben umgestellt, ein
+Update kostet also niemanden seine Historie. Ist der Speicher trotzdem voll, sagt
+`StorageFullError`, wie viele Zeiten drin sind und dass ein Zurücksetzen in der Wertung
+hilft — statt „Failed to execute setItem on Storage".
+
 Der statische Build wird über `NEXT_PUBLIC_STATIC_EXPORT=1` aktiviert. Die API-Routen
 heißen `route.node.ts` und werden über `pageExtensions` in `next.config.ts` aus dem
 statischen Build ausgeschlossen — `output: "export"` kann keine POST-Handler erzeugen.

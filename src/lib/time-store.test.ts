@@ -76,11 +76,12 @@ describe("storage format", () => {
   before(stubStorage);
   beforeEach(() => store.clear());
 
-  it("writes tuples, not objects, and reads its own writing back", async () => {
+  it("writes the packed format and reads its own writing back", async () => {
     await store.saveRun("golf", "monza", 90_000);
     const raw = JSON.parse(window.localStorage.getItem("td-clone:times")!);
-    assert.ok(Array.isArray(raw[0]), "an entry should be stored as a tuple");
-    assert.deepEqual(raw[0].slice(0, 3), ["golf", "monza", 90_000]);
+    assert.equal(raw.v, 3, "the packed format carries its version");
+    assert.deepEqual(raw.c, ["golf"], "ids live in a dictionary");
+    assert.deepEqual(raw.t, ["monza"]);
 
     const [entry] = await store.getLeaderboard("monza");
     assert.equal(entry.carId, "golf");
@@ -102,10 +103,10 @@ describe("storage format", () => {
     assert.equal(entry.carId, "golf");
     assert.equal(entry.timeMs, 88_000);
 
-    // And the next write puts them back compact.
+    // And the next write puts them back in the packed format.
     await store.saveRun("polo", "monza", 95_000);
     const raw = JSON.parse(window.localStorage.getItem("td-clone:times")!);
-    assert.ok(raw.every((e: unknown) => Array.isArray(e)));
+    assert.equal(raw.v, 3);
     assert.equal((await store.getLeaderboard("monza")).length, 2);
   });
 

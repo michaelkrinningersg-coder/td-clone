@@ -8,6 +8,8 @@
  * to the store. That keeps a single code path and guarantees the animation the
  * user watched matches the time that gets stored. */
 
+import { decodeTimes, encodeTimes } from "@/lib/time-codec";
+
 export interface TimeEntryData {
   id: string;
   carId: string;
@@ -49,51 +51,14 @@ export interface TimeStore {
 
 const STORAGE_KEY = "td-clone:times";
 
-/** Stored as tuples rather than objects, and without the id.
- *
- * The browser gives an origin about five megabytes, and a championship of a
- * hundred cars over ten tracks is a thousand times. Written as objects that is
- * 187 characters each and the quota is gone after some twenty-eight
- * championships - which is what it did. A tuple drops the repeated key names,
- * the id is `trackId:carId` and so derivable, and the date fits in seconds:
- * 66 characters, near enough three times the room.
- *
- * `[carId, trackId, timeMs, createdAtSeconds]` */
-type StoredEntry = [string, string, number, number];
-
 function entryId(trackId: string, carId: string): string {
   return `${trackId}:${carId}`;
 }
 
-function toEntry([carId, trackId, timeMs, seconds]: StoredEntry): TimeEntryData {
-  return {
-    id: entryId(trackId, carId),
-    carId,
-    trackId,
-    timeMs,
-    createdAt: new Date(seconds * 1000).toISOString(),
-  };
-}
-
-function toStored(entry: TimeEntryData): StoredEntry {
-  return [entry.carId, entry.trackId, entry.timeMs, Math.floor(Date.parse(entry.createdAt) / 1000)];
-}
-
 function readAll(): TimeEntryData[] {
   if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as StoredEntry[] | TimeEntryData[];
-    if (parsed.length === 0) return [];
-    // Times written before the format changed are objects, not tuples. Read
-    // them as they are; the next write puts them back compact.
-    return Array.isArray(parsed[0])
-      ? (parsed as StoredEntry[]).map(toEntry)
-      : (parsed as TimeEntryData[]);
-  } catch {
-    return [];
-  }
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  return raw ? decodeTimes(raw) : [];
 }
 
 /** Thrown when the browser's storage is full. Its own class so the caller can
@@ -110,7 +75,10 @@ export class StorageFullError extends Error {
 
 function writeAll(entries: TimeEntryData[]) {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.map(toStored)));
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      encodeTimes(entries, Math.floor(Date.now() / 1000)),
+    );
   } catch (err) {
     // Every browser names its quota error differently, and some only set the
     // code. What they agree on is that nothing was written.
