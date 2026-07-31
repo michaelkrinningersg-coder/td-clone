@@ -3,19 +3,23 @@
 import { useState } from "react";
 import { OverallStandings } from "@/components/OverallStandings";
 import { TrackRecords } from "@/components/TrackRecords";
+import { SaveGamePanel } from "@/components/SaveGamePanel";
 
-type Tab = "overall" | "records";
+type Tab = "overall" | "records" | "save";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "overall", label: "Gesamtwertung", hint: "Jedes Auto über alle Strecken, dazu die Markenwertung." },
   { id: "records", label: "Streckenrekorde", hint: "Je Strecke die Bestzeit und wer sie hält." },
+  { id: "save", label: "Spielstand", hint: "Alles Gefahrene als Datei sichern und wieder einlesen." },
 ];
 
 /** The two ways of reading the same times: down the cars, or down the tracks.
  *
  * Tabs rather than one page under the other, because they are alternatives and
  * not a sequence - the record board answers "where have I been", the standings
- * answer "which car is best", and neither is a footnote to the other. */
+ * answer "which car is best", and neither is a footnote to the other. The third
+ * is where all of it can be carried off to a file, which belongs with the
+ * boards rather than hidden in a menu: it is the same data. */
 export function StandingsTabs() {
   const [tab, setTab] = useState<Tab>("overall");
 
@@ -40,7 +44,9 @@ export function StandingsTabs() {
         <p className="text-xs text-zinc-500">{TABS.find((t) => t.id === tab)!.hint}</p>
       </div>
 
-      {tab === "overall" ? <OverallStandings /> : <TrackRecords />}
+      {tab === "overall" && <OverallStandings />}
+      {tab === "records" && <TrackRecords />}
+      {tab === "save" && <SaveGamePanel />}
     </>
   );
 }

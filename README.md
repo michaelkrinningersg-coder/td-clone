@@ -55,6 +55,30 @@ Update kostet also niemanden seine Historie. Ist der Speicher trotzdem voll, sag
 `StorageFullError`, wie viele Zeiten drin sind und dass ein Zurücksetzen in der Wertung
 hilft — statt „Failed to execute setItem on Storage".
 
+### Spielstand
+
+Trotzdem liegt der Fortschritt nur in **einem** Browser. Unter *Wertung → Spielstand* geht
+alles davon als Datei raus und wieder rein: jede gefahrene Zeit, dazu eine laufende
+Meisterschaft, ein laufendes Duell und die aktuelle Auswahl. Bewusst lesbares JSON statt des
+gepackten Speicherformats — eine Austauschdatei soll sich öffnen, lesen und notfalls von Hand
+ändern lassen; das Packen löst ein Browser-Kontingent, das eine Datei auf der Platte nicht
+hat. Die Zeiten stehen als Tupel drin, weil sie den Großteil ausmachen: tausend Zeiten sind
+so 76 KB statt 190.
+
+Beim Einlesen zwei Wege:
+
+- **Zusammenführen** behält je Auto und Strecke die schnellere Zeit — dieselbe Regel, der
+  auch ein wiederholter Lauf folgt. Den eigenen Spielstand zurückzuladen ändert deshalb
+  garantiert nichts, was ein Test festhält.
+- **Ersetzen** wirft alles Vorhandene weg und übernimmt nur die Datei, samt laufender Serien.
+  Zwei halbfertige Meisterschaften ineinanderzufalten ergibt keinen Sinn, deshalb reisen die
+  nur auf diesem Weg mit.
+
+Zeiten, deren Auto oder Strecke es in dieser Version nicht mehr gibt — der Importfilter wirft
+gelegentlich Autos raus —, werden gezählt und übersprungen statt in eine Rangliste
+geschmuggelt, in der nichts über sie nachschlagbar wäre. Eine Datei, die kein Spielstand ist,
+sagt das im Klartext, statt einfach nicht zu funktionieren.
+
 Der statische Build wird über `NEXT_PUBLIC_STATIC_EXPORT=1` aktiviert. Die API-Routen
 heißen `route.node.ts` und werden über `pageExtensions` in `next.config.ts` aus dem
 statischen Build ausgeschlossen — `output: "export"` kann keine POST-Handler erzeugen.
