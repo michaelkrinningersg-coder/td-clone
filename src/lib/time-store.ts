@@ -34,6 +34,10 @@ export function isImprovement(previousMs: number, candidateMs: number): boolean 
 
 export interface TimeStore {
   saveRun(carId: string, trackId: string, timeMs: number): Promise<SaveResult>;
+  /** Every car of one grid at once. A championship round is a hundred times,
+   * and saving them one at a time re-read and re-wrote the whole store a
+   * hundred times over - quadratic in a store that is already megabytes. */
+  saveRuns(runs: readonly { carId: string; trackId: string; timeMs: number }[]): Promise<SaveResult[]>;
   getLeaderboard(trackId: string): Promise<TimeEntryData[]>;
   /** Drops a single recorded time. Nothing else references an entry, so the
    * board simply re-ranks around the gap. */
@@ -45,52 +49,131 @@ export interface TimeStore {
 
 const STORAGE_KEY = "td-clone:times";
 
+/** Stored as tuples rather than objects, and without the id.
+ *
+ * The browser gives an origin about five megabytes, and a championship of a
+ * hundred cars over ten tracks is a thousand times. Written as objects that is
+ * 187 characters each and the quota is gone after some twenty-eight
+ * championships - which is what it did. A tuple drops the repeated key names,
+ * the id is `trackId:carId` and so derivable, and the date fits in seconds:
+ * 66 characters, near enough three times the room.
+ *
+ * `[carId, trackId, timeMs, createdAtSeconds]` */
+type StoredEntry = [string, string, number, number];
+
+function entryId(trackId: string, carId: string): string {
+  return `${trackId}:${carId}`;
+}
+
+function toEntry([carId, trackId, timeMs, seconds]: StoredEntry): TimeEntryData {
+  return {
+    id: entryId(trackId, carId),
+    carId,
+    trackId,
+    timeMs,
+    createdAt: new Date(seconds * 1000).toISOString(),
+  };
+}
+
+function toStored(entry: TimeEntryData): StoredEntry {
+  return [entry.carId, entry.trackId, entry.timeMs, Math.floor(Date.parse(entry.createdAt) / 1000)];
+}
+
 function readAll(): TimeEntryData[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as TimeEntryData[]) : [];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as StoredEntry[] | TimeEntryData[];
+    if (parsed.length === 0) return [];
+    // Times written before the format changed are objects, not tuples. Read
+    // them as they are; the next write puts them back compact.
+    return Array.isArray(parsed[0])
+      ? (parsed as StoredEntry[]).map(toEntry)
+      : (parsed as TimeEntryData[]);
   } catch {
     return [];
   }
 }
 
+/** Thrown when the browser's storage is full. Its own class so the caller can
+ * say something useful instead of relaying "failed to execute setItem". */
+export class StorageFullError extends Error {
+  constructor(readonly entries: number) {
+    super(
+      `Der Zeitspeicher des Browsers ist voll (${entries} Zeiten). ` +
+        "Neue Zeiten werden nicht mehr gespeichert, bis in der Wertung Ranglisten zurückgesetzt werden.",
+    );
+    this.name = "StorageFullError";
+  }
+}
+
 function writeAll(entries: TimeEntryData[]) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.map(toStored)));
+  } catch (err) {
+    // Every browser names its quota error differently, and some only set the
+    // code. What they agree on is that nothing was written.
+    const name = err instanceof Error ? err.name : "";
+    if (/quota|storage/i.test(name) || (err as { code?: number })?.code === 22) {
+      throw new StorageFullError(entries.length);
+    }
+    throw err;
+  }
 }
 
 /** The backend the Pages build uses. Exported so tests can drive it against a
  * stubbed localStorage without having to fake a whole build mode. */
+/** Folds one run into a list already in memory, and says whether the list
+ * changed. Kept apart from the storage so a whole grid can be applied before
+ * anything is written. */
+function applyRun(
+  all: TimeEntryData[],
+  carId: string,
+  trackId: string,
+  timeMs: number,
+): { entry: TimeEntryData; improved: boolean; changed: boolean } {
+  const index = all.findIndex((e) => e.trackId === trackId && e.carId === carId);
+  if (index === -1) {
+    const entry: TimeEntryData = {
+      id: entryId(trackId, carId),
+      carId,
+      trackId,
+      timeMs,
+      createdAt: new Date().toISOString(),
+    };
+    all.push(entry);
+    return { entry, improved: false, changed: true };
+  }
+  if (isImprovement(all[index].timeMs, timeMs)) {
+    const entry = { ...all[index], timeMs, createdAt: new Date().toISOString() };
+    all[index] = entry;
+    return { entry, improved: true, changed: true };
+  }
+  return { entry: all[index], improved: false, changed: false }; // existing time stands
+}
+
+function rankIn(all: readonly TimeEntryData[], entry: TimeEntryData): SaveResult {
+  const onTrack = all.filter((e) => e.trackId === entry.trackId);
+  return {
+    entry,
+    rank: onTrack.filter((e) => e.timeMs < entry.timeMs).length + 1,
+    totalEntries: onTrack.length,
+    improved: false,
+  };
+}
+
 export const browserTimeStore: TimeStore = {
   async saveRun(carId, trackId, timeMs) {
+    const [result] = await this.saveRuns([{ carId, trackId, timeMs }]);
+    return result;
+  },
+
+  async saveRuns(runs) {
     const all = readAll();
-    const index = all.findIndex((e) => e.trackId === trackId && e.carId === carId);
-
-    let entry: TimeEntryData;
-    let improved = false;
-
-    if (index === -1) {
-      entry = {
-        id: `${trackId}:${carId}`,
-        carId,
-        trackId,
-        timeMs,
-        createdAt: new Date().toISOString(),
-      };
-      all.push(entry);
-      writeAll(all);
-    } else if (isImprovement(all[index].timeMs, timeMs)) {
-      entry = { ...all[index], timeMs, createdAt: new Date().toISOString() };
-      all[index] = entry;
-      improved = true;
-      writeAll(all);
-    } else {
-      entry = all[index]; // existing time stands
-    }
-
-    const onTrack = all.filter((e) => e.trackId === trackId);
-    const rank = onTrack.filter((e) => e.timeMs < entry.timeMs).length + 1;
-    return { entry, rank, totalEntries: onTrack.length, improved };
+    const applied = runs.map((r) => applyRun(all, r.carId, r.trackId, r.timeMs));
+    if (applied.some((a) => a.changed)) writeAll(all);
+    return applied.map((a) => ({ ...rankIn(all, a.entry), improved: a.improved }));
   },
 
   async getLeaderboard(trackId) {
@@ -112,6 +195,14 @@ export const browserTimeStore: TimeStore = {
 };
 
 const apiStore: TimeStore = {
+  async saveRuns(runs) {
+    // Sequential on purpose: the board's ranking is read back per save, and
+    // firing them together would race each other for it.
+    const results: SaveResult[] = [];
+    for (const run of runs) results.push(await this.saveRun(run.carId, run.trackId, run.timeMs));
+    return results;
+  },
+
   async saveRun(carId, trackId, timeMs) {
     const res = await fetch("/api/runs", {
       method: "POST",

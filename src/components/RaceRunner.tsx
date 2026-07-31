@@ -125,9 +125,12 @@ export function RaceRunner({
   async function persist() {
     try {
       if (saveTimes) {
-        for (const { car, sim } of sims) {
-          await timeStore.saveRun(car.id, track.id, sim.totalTimeMs);
-        }
+        // One write for the whole grid: a championship round is a hundred
+        // cars, and a save each meant re-reading and re-writing the entire
+        // store a hundred times.
+        await timeStore.saveRuns(
+          sims.map(({ car, sim }) => ({ carId: car.id, trackId: track.id, timeMs: sim.totalTimeMs })),
+        );
         setSavedAt(Date.now());
       }
     } catch (err) {
