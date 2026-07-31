@@ -7,7 +7,9 @@ import {
   brakeFadeFactor,
   brakeHeatProfile,
   brakingDecelMps2,
+  cogHeightMm,
   corneringSpeedCapMps,
+  lateralTransferFactor,
   buildGearbox,
   driveForceN,
   gearTopSpeedsMps,
@@ -18,6 +20,7 @@ import {
   dragLimitedTopSpeedMps,
   effectiveTopSpeedMps,
   frontalAreaM2,
+  isForcedInduction,
   longitudinalShare,
   rollingResistance,
   simulateRun,
@@ -45,6 +48,9 @@ const golfGti: CarPhysicsInput = {
   brakeFront: "ventilated-disc" as const,
   brakeRear: "disc" as const,
   cylinders: 4,
+  engineLayout: "inline" as const,
+  displacementCm3: 2000,
+  trackWidthMm: 1550,
   wheelbaseMm: 2650,
   tyreWidthMm: 225,
   gearCount: 6,
@@ -65,6 +71,9 @@ const veyron: CarPhysicsInput = {
   brakeFront: "ventilated-disc" as const,
   brakeRear: "ventilated-disc" as const,
   cylinders: 16,
+  engineLayout: "inline" as const,
+  displacementCm3: 2000,
+  trackWidthMm: 1550,
   wheelbaseMm: 2650,
   tyreWidthMm: 365,
   gearCount: 7,
@@ -226,10 +235,46 @@ describe("air density", () => {
     assert.ok(airDensityRatio(-25) > 1, "Baku sits below sea level");
   });
 
-  it("costs a combustion car time at altitude and leaves an electric one alone", () => {
-    assert.ok(altitudePowerFactor(golfGti, 2232) < 0.86);
+  // A turbo winds the boost up and keeps most of its power; an atmospheric
+  // engine loses it about in proportion; an electric motor does not care.
+  it("costs an atmospheric engine most, a turbo little and an electric nothing", () => {
+    const atmospheric = { ...golfGti, powerPs: 120, displacementCm3: 2000 }; // 60 PS/l
+    const turbo = { ...golfGti, powerPs: 245, displacementCm3: 2000 }; // 123 PS/l at 4.700/min
+    assert.ok(!isForcedInduction(atmospheric));
+    assert.ok(isForcedInduction(turbo));
+    assert.ok(altitudePowerFactor(atmospheric, 2232) < altitudePowerFactor(turbo, 2232));
+    assert.ok(altitudePowerFactor(atmospheric, 2232) < 0.82);
+    assert.ok(altitudePowerFactor(turbo, 2232) > 0.9);
     assert.equal(altitudePowerFactor({ ...golfGti, fuelType: "Electric" }, 2232), 1);
     assert.equal(altitudePowerFactor(golfGti, 0), 1);
+  });
+
+  describe("reading forced induction off the numbers", () => {
+    // The variant strings name it for a fifth of the field and miss 699 turbo
+    // diesels, so it comes from power against displacement instead.
+    it("calls a modern diesel blown and an old one not", () => {
+      const diesel = { ...golfGti, fuelType: "Diesel", powerPs: 150, torqueNm: 320 };
+      assert.ok(isForcedInduction({ ...diesel, year: 2015 }));
+      assert.ok(!isForcedInduction({ ...diesel, year: 1975 }));
+    });
+
+    it("tells boost from revs at the same specific output", () => {
+      // 120 PS a litre at 4.700/min is boost; the same at 8.300 is an S2000.
+      const blown = { ...golfGti, powerPs: 240, torqueNm: 380, displacementCm3: 2000 };
+      const screamer = { ...golfGti, powerPs: 240, torqueNm: 208, displacementCm3: 2000 };
+      assert.ok(isForcedInduction(blown));
+      assert.ok(!isForcedInduction(screamer));
+    });
+
+    it("does not let revs rescue an output nothing breathes on its own", () => {
+      // A Chiron: 1.500 PS from eight litres, and it peaks at 6.700/min.
+      const chiron = { ...golfGti, powerPs: 1500, torqueNm: 1600, displacementCm3: 8000 };
+      assert.ok(isForcedInduction(chiron));
+    });
+
+    it("leaves an electric car out of it entirely", () => {
+      assert.ok(!isForcedInduction({ ...golfGti, fuelType: "Electric", powerPs: 500 }));
+    });
   });
 
   // Less air is less drag but also less oxygen, and for a road car the engine
@@ -270,8 +315,13 @@ describe("aerodynamics", () => {
     assert.ok(Math.abs(at100 / at50 - 4) < 0.01, `expected 4x, got ${(at100 / at50).toFixed(2)}x`);
   });
 
-  it("takes wheel power from the engine, less transmission losses", () => {
-    assert.ok(Math.abs(wheelPowerW(golfGti) - 245 * 735.5 * 0.85) < 1);
+  // Not one figure for the field: a transverse front-driven car has the
+  // shortest path to the road, four-wheel drive the longest.
+  it("takes wheel power from the engine, less the losses that drivetrain has", () => {
+    assert.ok(Math.abs(wheelPowerW(golfGti) - 245 * 735.5 * 0.88) < 1);
+    const rwd = wheelPowerW({ ...golfGti, drivetrain: "RWD" });
+    const awd = wheelPowerW({ ...golfGti, drivetrain: "AWD" });
+    assert.ok(wheelPowerW(golfGti) > rwd && rwd > awd);
   });
 
   // Most of this field is electronically limited, so the listed top speed is a
@@ -544,6 +594,55 @@ describe("weight transfer", () => {
     for (const car of [golfGti, veyron]) {
       const grip = solveLaunchGrip(car);
       assert.ok(grip > 0.5 && grip < 2, `${grip.toFixed(2)} is not a road tyre`);
+    }
+  });
+});
+
+describe("lateral weight transfer", () => {
+  // Cornering throws load onto the outside wheels, and because grip does not
+  // rise in step with load the pair together grips less than it would level.
+  it("costs grip, and more the harder the car corners", () => {
+    assert.equal(lateralTransferFactor(golfGti, 0), 1);
+    assert.ok(lateralTransferFactor(golfGti, 1) < 1);
+    assert.ok(lateralTransferFactor(golfGti, 1.2) < lateralTransferFactor(golfGti, 0.6));
+  });
+
+  it("costs a tall narrow car more than a low wide one", () => {
+    const tall = { ...golfGti, heightMm: 1900, trackWidthMm: 1500 };
+    const low = { ...golfGti, heightMm: 1150, trackWidthMm: 1650 };
+    assert.ok(lateralTransferFactor(tall, 1) < lateralTransferFactor(low, 1));
+    assert.ok(corneringSpeedCapMps(80, tall) < corneringSpeedCapMps(80, low));
+  });
+
+  it("stays finite where the car would be up on two wheels", () => {
+    const silly = { ...golfGti, heightMm: 2600, trackWidthMm: 1000 };
+    const factor = lateralTransferFactor(silly, 3);
+    assert.ok(Number.isFinite(factor) && factor > 0 && factor < 1, `${factor}`);
+  });
+});
+
+describe("centre of gravity", () => {
+  // Where the engine sits fore and aft is not in the data; how it is arranged
+  // is - and a flat engine lies on its side and sits lower in the car.
+  it("puts a flat engine lower than an upright one", () => {
+    const flat = { ...golfGti, engineLayout: "flat" as const };
+    const vee = { ...golfGti, engineLayout: "vee" as const };
+    assert.ok(cogHeightMm(flat) < cogHeightMm(golfGti));
+    assert.ok(cogHeightMm(golfGti) < cogHeightMm(vee));
+  });
+
+  it("hands the flat-engined car more traction and more cornering for it", () => {
+    const flat = { ...golfGti, engineLayout: "flat" as const, drivetrain: "RWD" as const };
+    const vee = { ...flat, engineLayout: "vee" as const };
+    // Lower centre, less transfer off the front under power - and a rear-driven
+    // car wants the transfer, so here the vee gains and the flat corners better.
+    assert.ok(corneringSpeedCapMps(80, flat) > corneringSpeedCapMps(80, vee));
+  });
+
+  it("keeps every layout inside a share a real car could have", () => {
+    for (const engineLayout of ["inline", "vee", "flat", "rotary"] as const) {
+      const share = cogHeightMm({ ...golfGti, engineLayout }) / golfGti.heightMm;
+      assert.ok(share > 0.3 && share < 0.45, `${engineLayout}: ${share}`);
     }
   });
 });

@@ -28,7 +28,7 @@ siehe unten.
 ### Wie die Zeiten im Browser abgelegt sind
 
 `src/lib/time-codec.ts`. Der Browser gibt einer Seite rund fünf Megabyte, und das gesamte
-Feld auf allen Strecken sind 5.451 × 70 = 381.570 Zeiten. Als JSON-Objekte wären das 68 MB
+Feld auf allen Strecken sind 5.332 × 70 = 373.240 Zeiten. Als JSON-Objekte wären das 68 MB
 — das Kontingent war nach etwa 28 Meisterschaften voll, mit einem `setItem`-Fehler mitten im
 Lauf.
 
@@ -106,7 +106,8 @@ npx serve out
 [ilyasozkurt/automobile-models-and-specs](https://github.com/ilyasozkurt/automobile-models-and-specs)
 und übernimmt **nur** Autos, bei denen alle benötigten Werte vorhanden sind — Top-Speed,
 0–100 km/h, Leistung, Gewicht, Drehmoment, Antriebsart, Kraftstoffart, cw-Wert, Breite,
-Höhe, Radstand, Bremsen vorn und hinten, Reifenbreite, Zylinderzahl und Getriebe. Fehlt einer davon, fliegt das
+Höhe, Länge, Radstand, Spurweite, Bremsen vorn und hinten, Reifenbreite, Zylinderzahl,
+Bauform, Hubraum und Getriebe. Fehlt einer davon, fliegt das
 Auto raus statt geschätzt zu werden. Ergebnis landet in `src/data/cars.json` und ist
 eingecheckt, der Import muss also nicht laufen, um die App zu starten.
 
@@ -120,13 +121,13 @@ unter die kein Getriebe und kein Reifen kommt; ein BMW X1 mit 125 PS und 1.745 k
 liegt darunter. Zusammen fliegen 11 Autos raus, die sich nicht reparieren lassen, ohne
 einen Wert zu erfinden.
 
-Der Trichter von 30.066 Motorvarianten auf 5.451 Autos:
+Der Trichter von 30.066 Motorvarianten auf 5.332 Autos:
 
 | Schritt | bleiben |
 |---|---|
-| vollständige, plausible Daten | 16.850 |
-| Varianten mit identischen Fahrwerten zusammengefasst | 16.732 |
-| je Marke + Modell + Baujahr nur Einstiegs- und Topmotorisierung | 5.451 |
+| vollständige, plausible Daten | 16.544 |
+| Varianten mit identischen Fahrwerten zusammengefasst | 16.427 |
+| je Marke + Modell + Baujahr nur Einstiegs- und Topmotorisierung | 5.332 |
 
 Der letzte Schritt wirft die Zwischenmotorisierungen weg: die Quelle führt jede je
 verkaufte Version, etwa 46 Ausführungen des Volvo S80 von 2009. Gruppiert wird bewusst
@@ -199,6 +200,45 @@ Achslastverteilung. Beide folgen aus der Motorlage, und die Quelle führt in 65 
 keines dazu — nicht vorn/mitte/hinten, nicht längs/quer. Statt sie je Auto zu erfinden steht
 dort je eine benannte Konstante für alle: Schwerpunkt bei 38 % der Dachhöhe, statisch 50/50.
 
+**Antriebsverluste.** Nicht 85 % für alle, sondern danach, was sich drehen muss: quer
+eingebauter Frontantrieb 88 %, Heckantrieb 86 % (Kardanwelle plus Hypoidachse), Allrad 84 %
+(Verteilergetriebe und ein zweites Differenzial obendrauf). Der Allradwert ist der einzige
+gemessene: bei 0,80 — was ein Haldex an einem schlechten Tag real verliert — erreichten über
+ein Viertel der Allradautos ihre angegebene 0-100-Zeit nicht mehr, gegen vier Prozent bei
+den anderen. Das Modell hätte dem Antrieb angelastet, was der Motor liefern muss. Bei 0,84
+liegen sie gleichauf.
+
+**Aufladung.** Die Variantennamen taugen nicht (siehe unten), Leistung gegen Hubraum schon.
+Ein Straßendiesel ist seit etwa 1990 selbstverständlich aufgeladen; davor meist nicht. Und
+ein Benziner mit mehr als 95 PS je Liter ist entweder aufgeladen oder dreht sehr hoch dafür
+— ein Sauger kommt dorthin, indem er 8.000/min dreht, und die Nenndrehzahl sagt das bereits.
+Oberhalb von 130 PS je Liter atmet nichts mehr selbst, also rettet die Drehzahl dort nichts
+mehr: ein Chiron macht 187 bei 6.700/min. Ergebnis: 2.341 der 5.332 Autos aufgeladen, davon
+1.214 der 1.268 Diesel. Luftgekühlte 911 gelten als Sauger, Chiron und Veyron als aufgeladen,
+ein CrossGolf 1.4 TSI als aufgeladen und derselbe Wagen als 1.6 als Sauger.
+
+Damit ist der Kompromiss-Exponent in der Höhenluft weg: ein Sauger verliert dort nahezu
+proportional (Exponent 0,95), ein Turbo dreht den Ladedruck hoch und behält das meiste
+(0,40).
+
+**Querdynamische Radlastverlagerung.** Kurvenkräfte werfen Last auf die kurvenäußeren Räder,
+um `m · a · h / w`. Weil Grip nicht im Takt mit der Last steigt, ist der Gewinn außen kleiner
+als der Verlust innen, und das Paar greift zusammen schlechter als flach liegend:
+
+```
+Faktor = ((1 + t)^(1−n) + (1 − t)^(1−n)) / 2
+```
+
+Höhe und Spurweite sind beide gemessen — das ist der einzige Teil der Radlastverlagerung, der
+gar nichts Erfundenes braucht. Ein hohes schmalspuriges Auto verliert am meisten.
+
+**Schwerpunkthöhe aus der Bauform.** Wo der Motor längs sitzt, steht nirgends im Datensatz —
+**wie** er angeordnet ist, schon: die Quelle schreibt `H6` und `B4` für die liegenden Motoren.
+Ein Boxer sitzt eine Handbreit tiefer als ein stehender Reihen- oder V-Motor, und das sind
+zwei Punkte Dachhöhe (Boxer 36 %, Reihe 38 %, V 39 %). 392 Autos im Feld haben eine liegende
+Bauform. Damit ist die eine erfundene Konstante in der Radlastverlagerung wenigstens zur
+Hälfte durch echte Daten ersetzt; die statische Achslastverteilung bleibt 50/50.
+
 **Kalibrierung.** Der einzige gelöste Parameter ist der Reifengrip beim Start: er wird so
 bestimmt, dass die Simulation die reale 0-100-km/h-Zeit trifft. Seit der Radlastverlagerung
 ist das ein Reibbeiwert statt einer Kraft — und er landet dort, wo ein Straßenreifen lebt:
@@ -263,11 +303,11 @@ Nach unten begrenzt auf 15 %: ein Fahrer hält einen Rest zurück, und ein Auto,
 einer Kurve kein einziges Newton mehr aufbringen darf, würde in einer langen Kurve
 ausrollen.
 
-Kostet im Median 0,07 % Rundenzeit, maximal 1,97 %, und genau dort am meisten, wo es soll:
-Pikes Peak +0,55 %, Monaco und der enge Stadtkurs je +0,38 %, Lime Rock +0,30 %. Auf
-Geraden und Tempotests exakt null. Dass es nicht mehr ist, liegt am Streckenmodell: Kurven
-haben konstanten Radius und enden abrupt, also gibt es kaum Kurvenausgang, an dem der Kreis
-greifen könnte.
+Was der Kreis kostet, hing lange am Streckenmodell: Kurven hatten konstanten Radius und
+endeten abrupt, es gab also kaum Kurvenein- und -ausgang, an dem er greifen konnte. Seit die
+Radien gebändert werden (siehe unten) sind es **0,23 % im Median und 0,84 % maximal** statt
+0,07 % — am meisten in Zandvoort, Jacarepaguá und dem engen Stadtkurs, auf Geraden und
+Tempotests exakt null.
 
 **Zylinderzahl.** `Cylinders` steht für 99,96 % der Varianten da ("L4", "V8", "H6"). Ein
 Dreizylinder zündet dreimal je zwei Umdrehungen und atmet durch drei kleine Kanäle, ein V12
@@ -328,6 +368,17 @@ zusammengefasst, deren Radius aus dem Bogen selbst folgt — zurückgelegte Stre
 durch gedrehten Winkel. Die Drehrichtung gehört zur Klassifikation, sonst würde sich in
 einer Schikane die Rechts- gegen die Linkskurve aufheben und aus zwei engen Kurven ein
 schneller Knick.
+
+**Radienbänder.** Die Krümmung wird nicht nur nach Richtung gruppiert, sondern auch nach
+Schärfe — geometrisch gebändert im Verhältnis 1,6, also höchstens rund ein Viertel
+Radiusspreizung innerhalb eines Bandes. Eine Kurve, die sich von 200 m Einfahrt auf 40 m
+Scheitel zuzieht, ist eben keine Kurve mit 120 m: das Auto kommt schnell an, wird durch sie
+langsamer und nimmt am Ausgang das Gas wieder auf. Als ein gemittelter Bogen wäre sie ein
+Konstantfahrt-Stück, das abrupt anfängt und aufhört — genau die Stelle, an der das eine
+Reibungsbudget der Reifen für zwei Dinge gleichzeitig ausgegeben wird. Ein wirklich
+konstanter Bogen bleibt dabei ein Stück; Splitter aus Vermessungsrauschen werden per Bogen
+wieder zusammengelegt, sodass Länge und Drehwinkel erhalten bleiben. Monza hat damit 46
+Kurvensegmente mit Radien von 23 bis 3.473 m, Suzuka 72.
 
 Gezeichnet wird der vermessene Punktzug selbst, nicht die zurückgerechnete Segmentliste.
 So ist die Form auf dem Bildschirm die echte Geometrie der Strecke, und die Runde schließt
@@ -472,6 +523,18 @@ versteckter Konkurrenz.
 Über der Rekordtabelle steht zusätzlich, **welche Marke wie viele Streckenrekorde hält** —
 eine Marke mit einem unschlagbaren Auto ist etwas anderes als eine, die überall vorn ist,
 und nur diese Tabelle trennt die beiden.
+
+## Rechnen ohne die Seite anzuhalten
+
+Eine Runde kostet rund 20 ms, das meiste davon das Lösen des Reifengrips gegen die reale
+0-100-Zeit — sechzig Bisektionsschritte, jeder ein voller Lauf auf hundert. Ein
+Meisterschaftslauf sind hundert Autos, also zwei Sekunden, in denen die Seite tot ist.
+
+`src/lib/sim.worker.ts` rechnet das in einem Web Worker, und `useSimulatedField` zeigt
+solange „Simuliere 37 von 100…" statt zu schweigen. Fällt der Worker aus — ein Browser ohne,
+ein blockiertes Bündel, der Prerender ohne `window` —, läuft dieselbe Funktion auf demselben
+Thread weiter: identische Zahlen, nur woanders. Im Browser gemessen reagiert die Seite
+während der Simulation nach 64 ms statt einzufrieren.
 
 ## Tests
 

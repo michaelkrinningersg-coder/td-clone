@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { buildTrackPath, outlinePath, pointAtDistance, toSvgPath } from "@/lib/track-geometry";
-import { interpolateTraceAtTime, simulateTrack, type SimResult } from "@/lib/physics";
+import { interpolateTraceAtTime } from "@/lib/physics";
+import { useSimulatedField } from "@/lib/use-simulated-field";
 import { playbackDurationMs, raceHex, rankRacers, type RacerProgress } from "@/lib/race";
 import { timeStore } from "@/lib/time-store";
 import { formatTimeMs } from "@/lib/format";
@@ -53,12 +54,12 @@ export function RaceRunner({
   const strokeWidth = Math.max(path.maxX - path.minX, path.maxY - path.minY, 1) / 120;
 
   /** Every car is simulated up front; the animation is only a replay of results
-   * that already exist, which is what lets the ranking know each final time. */
-  const sims = useMemo<{ car: CarData; sim: SimResult }[]>(
-    () => cars.map((car) => ({ car, sim: simulateTrack(car, track) })),
-    [cars, track],
-  );
-  const slowestMs = Math.max(...sims.map((s) => s.sim.totalTimeMs));
+   * that already exist, which is what lets the ranking know each final time.
+   * Off the main thread, because a hundred cars is two seconds of arithmetic
+   * and the page should not go dead while it happens. */
+  const field = useSimulatedField(cars, track);
+  const sims = useMemo(() => field.sims ?? [], [field.sims]);
+  const slowestMs = sims.length ? Math.max(...sims.map((s) => s.sim.totalTimeMs)) : 1;
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [simTimeS, setSimTimeS] = useState(0);
@@ -149,12 +150,24 @@ export function RaceRunner({
   return (
     <div className="mt-6 flex flex-col gap-4">
       {phase === "idle" && (
-        <button
-          onClick={handleStart}
-          className="self-start rounded-full bg-emerald-500 px-6 py-3 font-semibold text-zinc-950 hover:bg-emerald-400"
-        >
-          Rennen starten
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleStart}
+            disabled={field.sims === null}
+            className="self-start rounded-full bg-emerald-500 px-6 py-3 font-semibold text-zinc-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Rennen starten
+          </button>
+          {/* The wait is only visible on a big grid; a handful of cars is done
+              before the button has finished drawing. */}
+          {field.sims === null && (
+            <span className="text-sm text-zinc-400">
+              Simuliere {field.done} von {field.total}
+              {field.total > 1 ? " Autos" : " Auto"}...
+            </span>
+          )}
+          {field.error && <span className="text-sm text-amber-400">{field.error}</span>}
+        </div>
       )}
 
       {error && !showResult && <p className="text-amber-400">{error}</p>}

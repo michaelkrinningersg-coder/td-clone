@@ -35,6 +35,7 @@ const completeEngine: RawEngine = {
       "Torque:": "300 Lb-Ft @ 4000 Rpm\r\n407 Nm @ 4000 Rpm",
       "Fuel:": "Gasoline",
       "Cylinders:": "V8",
+      "Displacement:": "3506 Cm3",
     },
     "Weight Specs": { "Unladen Weight:": "3560 Lbs (1615 Kg)" },
     "Brakes Specs": { "Front:": "Ventilated Discs", "Rear:": "Discs" },
@@ -49,6 +50,8 @@ const completeEngine: RawEngine = {
       "Width:": "74.4 In (1890 Mm)",
       "Height:": "52.8 In (1341 Mm)",
       "Wheelbase:": "104.3 In (2650 Mm)",
+      "Length:": "183.5 In (4661 Mm)",
+      "Front/Rear Track:": "62.6/61.8 In (1,590/1,570 Mm)",
     },
   },
 };
@@ -76,6 +79,10 @@ describe("convertEngine", () => {
       brakeFront: "ventilated-disc",
       brakeRear: "disc",
       cylinders: 8,
+      engineLayout: "vee" as const,
+      displacementCm3: 3506,
+      lengthMm: 4661,
+      trackWidthMm: 1580,
       wheelbaseMm: 2650,
       tyreWidthMm: 245,
       gearCount: 6,
@@ -91,6 +98,7 @@ describe("convertEngine", () => {
     ["Engine Specs", "Torque:"],
     ["Engine Specs", "Fuel:"],
     ["Engine Specs", "Cylinders:"],
+    ["Engine Specs", "Displacement:"],
     ["Weight Specs", "Unladen Weight:"],
     ["Performance Specs", "Acceleration 0-62 Mph (0-100 Kph):"],
     ["Performance Specs", "Top Speed:"],
@@ -100,6 +108,8 @@ describe("convertEngine", () => {
     ["Dimensions", "Width:"],
     ["Dimensions", "Height:"],
     ["Dimensions", "Wheelbase:"],
+    ["Dimensions", "Length:"],
+    ["Dimensions", "Front/Rear Track:"],
     ["Brakes Specs", "Front:"],
     ["Brakes Specs", "Rear:"],
     ["Tires Specs", "Tire Size:"],
@@ -282,6 +292,10 @@ describe("dedupeVariants", () => {
     brakeFront: "ventilated-disc" as const,
     brakeRear: "disc" as const,
     cylinders: 4,
+    engineLayout: "inline" as const,
+    displacementCm3: 2000,
+    lengthMm: 4500,
+    trackWidthMm: 1550,
     wheelbaseMm: 2650,
     tyreWidthMm: 225,
     gearCount: 6,
@@ -360,6 +374,10 @@ describe("keepBaseAndTopVariants", () => {
     brakeFront: "ventilated-disc" as const,
     brakeRear: "disc" as const,
     cylinders: 4,
+    engineLayout: "inline" as const,
+    displacementCm3: 2000,
+    lengthMm: 4500,
+    trackWidthMm: 1550,
     wheelbaseMm: 2650,
     tyreWidthMm: 225,
     gearCount: 6,
@@ -481,6 +499,10 @@ describe("isPlausible", () => {
     brakeFront: "ventilated-disc" as const,
     brakeRear: "disc" as const,
     cylinders: 4,
+    engineLayout: "inline" as const,
+    displacementCm3: 2000,
+    lengthMm: 4500,
+    trackWidthMm: 1550,
     wheelbaseMm: 2650,
     tyreWidthMm: 225,
     gearCount: 6,
@@ -509,8 +531,15 @@ describe("isPlausible", () => {
   });
 
   it("accepts the extremes that are real", () => {
-    assert.equal(isPlausible({ ...base, widthMm: 1250, heightMm: 1000 }), true); // a bubble car
-    assert.equal(isPlausible({ ...base, widthMm: 2100, heightMm: 2300 }), true); // a big van
+    // A bubble car: narrow body, and the wheels narrower still.
+    assert.equal(isPlausible({ ...base, widthMm: 1250, heightMm: 1000, trackWidthMm: 1100 }), true);
+    assert.equal(isPlausible({ ...base, widthMm: 2100, heightMm: 2300, trackWidthMm: 1800 }), true);
+  });
+
+  // Wheels cannot stand further apart than the car is wide.
+  it("rejects a track wider than the body it is under", () => {
+    assert.equal(isPlausible({ ...base, widthMm: 1800, trackWidthMm: 1850 }), false);
+    assert.equal(isPlausible({ ...base, widthMm: 1800, trackWidthMm: 1550 }), true);
   });
 
   // Power and torque fix the engine speed: P = M · omega. The source really

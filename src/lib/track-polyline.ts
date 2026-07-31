@@ -91,6 +91,10 @@ export interface PolylineOptions {
   /** Straights shorter than this are folded into the segment before them, so
    * the simulation is not stepping through two-metre slivers. */
   minSegmentM?: number;
+  /** And a corner shorter than this is folded into the corner beside it when
+   * they turn the same way - the scrap a survey leaves when it wobbles across a
+   * radius band, rather than a piece of road. */
+  minCornerBandM?: number;
   gradients?: GradientBand[];
 }
 
@@ -114,6 +118,7 @@ export function polylineToSegments(points: Point[], options: PolylineOptions = {
     windowM = 15,
     straightRadiusM = 400,
     minSegmentM = 12,
+    minCornerBandM = 15,
     gradients,
   } = options;
 
@@ -123,18 +128,33 @@ export function polylineToSegments(points: Point[], options: PolylineOptions = {
   const step = polylineLength(points) / n;
   const window = Math.max(1, Math.round(windowM / step));
 
-  // Each sample is a straight, a left or a right. Direction has to be part of
-  // the class: a chicane grouped as one corner would have its right and its
-  // left cancel out, and the arc would come back with the radius of a fast kink
-  // instead of the two tight corners it really is.
-  type Klass = "straight" | "left" | "right";
+  // Each sample is a straight, or a direction together with how tight it is.
+  //
+  // Direction has to be part of the class: a chicane grouped as one corner
+  // would have its right and its left cancel out, and the arc would come back
+  // with the radius of a fast kink instead of the two tight corners it is.
+  //
+  // Tightness has to be part of it as well, and that is the newer half. A
+  // corner that winds from a two-hundred-metre entry down to a forty-metre
+  // apex is not one corner of a hundred and twenty: the car arrives quickly,
+  // slows through it and picks the throttle up on the way out. Grouped as a
+  // single mean radius it becomes a constant-speed arc that starts and ends
+  // abruptly, with no entry to brake into and no exit to accelerate out of -
+  // which is exactly the part of a lap where the tyres' one grip budget is
+  // being spent on two things at once. Banding the radius geometrically keeps
+  // a genuinely constant corner in one piece while letting a tightening one
+  // come apart into the arcs it is really made of.
+  const BAND_RATIO = 1.6; // at most about a quarter's radius spread inside a band
+  const bandOf = (radius: number) => Math.round(Math.log(radius) / Math.log(BAND_RATIO));
+
+  type Klass = string;
   const classes: Klass[] = samples.map((_, i) => {
     const radius = circumradius(samples[(i - window + n) % n], samples[i], samples[(i + window) % n]);
     if (radius >= straightRadiusM) return "straight";
     const turn = normalise(
       headingAt(samples, (i + window) % n) - headingAt(samples, (i - window + n) % n),
     );
-    return turn < 0 ? "right" : "left";
+    return `${turn < 0 ? "right" : "left"}:${bandOf(radius)}`;
   });
 
   interface Run {
@@ -167,7 +187,7 @@ export function polylineToSegments(points: Point[], options: PolylineOptions = {
     const midFraction = (((run.from + run.to) / 2 + n) % n) / n;
     const gradientPercent = gradientAt(midFraction, gradients);
 
-    if (run.klass !== "straight" && Math.abs(turn) > 1e-6) {
+    if (!run.klass.startsWith("straight") && Math.abs(turn) > 1e-6) {
       segments.push({
         kind: "corner",
         lengthM,
@@ -181,7 +201,36 @@ export function polylineToSegments(points: Point[], options: PolylineOptions = {
     }
   }
 
-  return mergeShort(segments, minSegmentM);
+  return mergeShort(mergeCornerSlivers(segments, minCornerBandM), minSegmentM);
+}
+
+/** Folds a corner shorter than `minLengthM` into the corner beside it, when
+ * they turn the same way.
+ *
+ * Banding the radius makes a tightening corner come apart into the arcs it is
+ * made of, which is the point - but a survey that wobbles across a band
+ * boundary would also produce three-metre scraps that are noise rather than
+ * road. Combined by arc, so the pair keeps both its length and the angle it
+ * turns through: the radius of the whole is how far it ran over how far it
+ * turned, exactly as a single run would have given. */
+function mergeCornerSlivers(segments: Segment[], minLengthM: number): Segment[] {
+  const out: Segment[] = [];
+  for (const segment of segments) {
+    const previous = out[out.length - 1];
+    const mergeable =
+      segment.kind === "corner" &&
+      previous?.kind === "corner" &&
+      previous.dir === segment.dir &&
+      Math.min(previous.lengthM, segment.lengthM) < minLengthM;
+    if (!mergeable) {
+      out.push({ ...segment });
+      continue;
+    }
+    const turned = previous.lengthM / previous.radiusM + segment.lengthM / segment.radiusM;
+    previous.lengthM += segment.lengthM;
+    previous.radiusM = previous.lengthM / turned;
+  }
+  return out;
 }
 
 /** Folds away the scraps of straight left between corners, keeping the lap's

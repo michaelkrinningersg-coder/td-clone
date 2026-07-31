@@ -1,5 +1,5 @@
 import type { Segment, SpeedTest } from "./track-types";
-import type { BrakeKind, GearboxKind } from "./car-import";
+import type { BrakeKind, EngineLayout, GearboxKind } from "./car-import";
 
 const G = 9.81;
 const KPH_TO_MPS = 1 / 3.6;
@@ -47,6 +47,13 @@ export interface CarPhysicsInput {
   tyreWidthMm: number;
   /** How many cylinders - what lets an engine hold a flat torque curve. */
   cylinders: number;
+  /** And how they are arranged - a flat engine sits lower. */
+  engineLayout: EngineLayout;
+  /** Swept volume in cm3; with the power it says whether the engine is fed. */
+  displacementCm3: number;
+  /** How far apart the wheels are - what resists the car leaning onto its
+   * outside tyres in a corner. */
+  trackWidthMm: number;
   /** Distance between the axles, which sets how much load moves rearward under
    * acceleration - see `tractionLimitedDriveN`. */
   wheelbaseMm: number;
@@ -85,9 +92,26 @@ const BRAKE_G: Record<BrakeKind, number> = {
   drum: 0.75,
 };
 
-/** Share of engine power that reaches the road. Transmission losses are not in
- * the data, so this is a shared constant like the friction and rolling figures. */
-const DRIVETRAIN_EFFICIENCY = 0.85;
+/** Share of engine power that reaches the road, by what has to turn to get it
+ * there.
+ *
+ * A transverse front-driven car has the shortest path: gearbox and differential
+ * in one case, straight to the wheels. A rear-driven one adds a propshaft and a
+ * hypoid final drive, which is the least efficient gear pair in a car. Four-
+ * wheel drive adds a transfer case and a second differential on top, and pays
+ * for it.
+ *
+ * The four-wheel figure is the one that had to be measured rather than looked
+ * up: at 0,80, which is what a Haldex system on a bad day really loses, more
+ * than a quarter of the four-wheel-drive field could no longer reach its quoted
+ * 0-100 time against four per cent for the others - the model was blaming the
+ * drivetrain for something the engine had to deliver. At 0,84 it is level with
+ * them again. */
+const DRIVETRAIN_EFFICIENCY: Record<Drivetrain, number> = {
+  FWD: 0.88,
+  RWD: 0.86,
+  AWD: 0.84,
+};
 const PS_TO_WATT = 735.5;
 
 /** Time lost to one gearchange, by what kind of gearbox is fitted.
@@ -138,22 +162,61 @@ export function airDensityRatio(altitudeM: number): number {
   return Math.pow(1 - 2.25577e-5 * altitudeM, 4.2559);
 }
 
+/** Whether an engine is being fed rather than breathing on its own.
+ *
+ * The variant strings name forced induction for barely a fifth of the field and
+ * miss 699 diesels that all have a turbo, so they cannot be trusted. Power
+ * against displacement can, on two signals that are both real data:
+ *
+ * A road diesel has been turbocharged as a matter of course since about 1990;
+ * before that most were not. And a petrol engine making more than about 95 PS
+ * per litre is either blown or revving very hard for it - a naturally aspirated
+ * engine gets there by spinning to 8.000/min, which the rated speed already
+ * says. High output at low revs is boost; high output at high revs is not, up
+ * to the ceiling above which nothing breathes on its own at all.
+ *
+ * Neither signal is available per car as a label anywhere in the source, so
+ * this is inference - but it is inference from two measured numbers rather than
+ * from how a marketing department chose to name a trim. */
+const TURBO_PETROL_PS_PER_LITRE = 95;
+const TURBO_PETROL_MAX_RPM = 6500;
+/** Past this nothing breathes on its own however hard it revs. The best
+ * naturally aspirated road engines land near 120 PS a litre - an S2000 makes
+ * 120 at 8.300/min - so above 130 the rev gate must not rescue anything: a
+ * Chiron makes 187 at 6.700 and is quite obviously blown. */
+const ATMOSPHERIC_CEILING_PS_PER_LITRE = 130;
+const DIESEL_TURBO_FROM_YEAR = 1990;
+
+export function specificOutputPsPerLitre(car: CarPhysicsInput): number {
+  return car.powerPs / (car.displacementCm3 / 1000);
+}
+
+export function isForcedInduction(car: CarPhysicsInput & { year?: number }): boolean {
+  if (car.fuelType === "Electric") return false;
+  if (/diesel/i.test(car.fuelType ?? "")) return (car.year ?? 2000) >= DIESEL_TURBO_FROM_YEAR;
+  const perLitre = specificOutputPsPerLitre(car);
+  if (perLitre > ATMOSPHERIC_CEILING_PS_PER_LITRE) return true;
+  const rpm = (ratedSpeedRadS(car) * 60) / (2 * Math.PI);
+  return perLitre > TURBO_PETROL_PS_PER_LITRE && rpm < TURBO_PETROL_MAX_RPM;
+}
+
 /** How much of its power an engine keeps in thin air.
  *
  * An atmospheric engine loses it about in proportion: less air, less fuel, less
  * power. A turbo winds up the boost and gives back most of the loss until it
- * runs out of turbine. The dataset does not say which engine is which - the
- * variant strings name forced induction for barely a fifth of the field and
- * miss 699 diesels that are all turbocharged - so guessing per car would
- * mislabel more cars than it labelled. One exponent for the whole field
- * instead, nearer the atmospheric end because most of the field is.
- *
- * An electric motor carries its own oxidiser and does not care. */
-const ALTITUDE_POWER_EXPONENT = 0.75;
+ * runs out of turbine, so it keeps far more of it. An electric motor carries
+ * its own oxidiser and does not care at all. */
+const ALTITUDE_POWER_EXPONENT = { atmospheric: 0.95, forced: 0.4 };
 
-export function altitudePowerFactor(car: CarPhysicsInput, altitudeM: number): number {
+export function altitudePowerFactor(
+  car: CarPhysicsInput & { year?: number },
+  altitudeM: number,
+): number {
   if (car.fuelType === "Electric") return 1;
-  return Math.pow(airDensityRatio(altitudeM), ALTITUDE_POWER_EXPONENT);
+  const exponent = isForcedInduction(car)
+    ? ALTITUDE_POWER_EXPONENT.forced
+    : ALTITUDE_POWER_EXPONENT.atmospheric;
+  return Math.pow(airDensityRatio(altitudeM), exponent);
 }
 
 export function dragForceN(car: CarPhysicsInput, speedMps: number): number {
@@ -246,7 +309,7 @@ export function brakeFadeFactor(heat: number): number {
  * 250, so working backwards from that would have credited the Chiron with 444
  * of its 1103 kW and left it crawling through the mid-range. */
 export function wheelPowerW(car: CarPhysicsInput): number {
-  return car.powerPs * PS_TO_WATT * DRIVETRAIN_EFFICIENCY;
+  return car.powerPs * PS_TO_WATT * DRIVETRAIN_EFFICIENCY[car.drivetrain];
 }
 
 /** Torque at the power peak, as a share of peak torque.
@@ -431,7 +494,8 @@ function gearForceN(car: CarPhysicsInput, gearTopSpeed: number, speedMps: number
   // Wheel power is torque times engine speed, so the force works out as the
   // torque factor times the rated power divided by the gear's own top speed.
   return (
-    (torqueFactor(car, radS) * car.torqueNm * rated * DRIVETRAIN_EFFICIENCY) / gearTopSpeed
+    (torqueFactor(car, radS) * car.torqueNm * rated * DRIVETRAIN_EFFICIENCY[car.drivetrain]) /
+    gearTopSpeed
   );
 }
 
@@ -524,6 +588,27 @@ export function tyreGripFactor(car: CarPhysicsInput): number {
   return Math.max(TYRE_GRIP_MIN, Math.min(TYRE_GRIP_MAX, Math.pow(ratio, TYRE_LOAD_EXPONENT)));
 }
 
+/** What a corner costs a car for leaning on its outside wheels.
+ *
+ * Cornering throws load across the car by `m · a · h / w`: the outside tyres
+ * take more than their half, the inside ones less. Because grip does not rise
+ * in step with load (see `TYRE_LOAD_EXPONENT`), what the outside pair gains is
+ * less than what the inside pair gives up, and the pair together grips less
+ * than it would sitting level. A tall car on a narrow track loses most.
+ *
+ * With `n` the load exponent and `t` the share of its weight that moves:
+ *
+ *     factor = ((1 + t)^(1-n) + (1 - t)^(1-n)) / 2
+ *
+ * Both the height and the track are measured, so this is the one part of the
+ * weight transfer that needs nothing invented at all. */
+export function lateralTransferFactor(car: CarPhysicsInput, lateralG: number): number {
+  const t = Math.min(0.95, (lateralG * cogHeightMm(car)) / car.trackWidthMm);
+  if (t <= 0) return 1;
+  const exponent = 1 - TYRE_LOAD_EXPONENT;
+  return (Math.pow(1 + t, exponent) + Math.pow(1 - t, exponent)) / 2;
+}
+
 export function corneringSpeedCapMps(
   radiusM: number,
   car: CarPhysicsInput,
@@ -531,7 +616,11 @@ export function corneringSpeedCapMps(
 ): number {
   const baseMu = 0.95;
   const drivetrainFactor = car.drivetrain === "AWD" ? 1.05 : car.drivetrain === "FWD" ? 0.95 : 1.0;
-  const mu = baseMu * tyreGripFactor(car) * drivetrainFactor;
+  const level = baseMu * tyreGripFactor(car) * drivetrainFactor;
+  // How much load moves depends on how hard the car is cornering, and that
+  // depends on the grip left after it has moved. Two rounds settle it.
+  let mu = level;
+  for (let pass = 0; pass < 2; pass++) mu = level * lateralTransferFactor(car, mu);
   return Math.sqrt(bankedGripFactor(mu, bankingDegrees) * G * radiusM);
 }
 
@@ -576,13 +665,22 @@ export function bankedGripFactor(mu: number, bankingDegrees: number): number {
  * however hard the engine pulls, the tyres decide what reaches the road. */
 /** Height of the centre of gravity, as a share of the roof height.
  *
- * The one number here the dataset cannot supply. Where the engine sits would
- * settle it, and the source carries no such field for any car - not front, mid
- * or rear, not longitudinal or transverse - so a per-car figure would have to
- * be invented. A single share of the body height instead: a real car's centre
- * of gravity sits a little above a third of the way up, and low and tall cars
- * differ by their roofline, which is measured. */
-const COG_HEIGHT_FACTOR = 0.38;
+ * Where the engine sits fore and aft is still not in the data. How it is
+ * arranged is: the source writes "H6" and "B4" for the engines that lie on
+ * their side, and a flat engine sits a hand's width lower in the car than an
+ * upright inline or a vee of the same size. That is worth about two points of
+ * roof height, which is what separates a boxer Porsche or Subaru from an
+ * otherwise identical car - and it replaces part of the one figure here that
+ * had to be a single number for everybody.
+ *
+ * A rotary is tiny and mounts low as well, but there are six of them in the
+ * field, so it rides with the flat engines rather than earning its own row. */
+const COG_HEIGHT_FACTOR: Record<EngineLayout, number> = {
+  flat: 0.36,
+  rotary: 0.36,
+  inline: 0.38,
+  vee: 0.39,
+};
 
 /** Share of the car's weight sitting on the driven axle at rest.
  *
@@ -608,6 +706,11 @@ const STATIC_DRIVEN_SHARE = 0.5;
  *
  * with k = h / L and sigma +1 rear-driven, -1 front-driven, 0 for four-wheel
  * drive, where the transfer moves between driven axles and nets out. */
+/** How high the centre of gravity sits, in millimetres. */
+export function cogHeightMm(car: CarPhysicsInput): number {
+  return COG_HEIGHT_FACTOR[car.engineLayout] * car.heightMm;
+}
+
 export function tractionLimitedDriveN(
   car: CarPhysicsInput,
   grip: number,
@@ -615,7 +718,7 @@ export function tractionLimitedDriveN(
 ): number {
   const weightN = car.weightKg * G;
   if (car.drivetrain === "AWD") return grip * weightN;
-  const k = (COG_HEIGHT_FACTOR * car.heightMm) / car.wheelbaseMm;
+  const k = cogHeightMm(car) / car.wheelbaseMm;
   const sigma = car.drivetrain === "RWD" ? 1 : -1;
   // Floored: a rear-driven car on enormous grip would otherwise divide by zero,
   // which is the wheelie the model has no business simulating.

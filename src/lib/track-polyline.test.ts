@@ -371,3 +371,56 @@ describe("the circuits that ship", () => {
     assert.equal(tracks.find((t) => t.name === "Pikes Peak Hillclimb")!.outline, undefined);
   });
 });
+
+describe("corner radius banding", () => {
+  /** A corner that winds steadily tighter, as a surveyed line would give it. */
+  function tighteningCorner(): Point[] {
+    const points: Point[] = [[0, 0]];
+    let heading = 0;
+    let x = 0;
+    let y = 0;
+    for (let i = 0; i < 200; i++) {
+      // Radius from 220 m down to 40 m over the arc.
+      const radius = 220 - (180 * i) / 200;
+      heading += 2 / radius;
+      x += Math.cos(heading) * 2;
+      y += Math.sin(heading) * 2;
+      points.push([x, y]);
+    }
+    return points;
+  }
+
+  // A tightening corner is not one corner of the mean radius: the car arrives
+  // quickly, slows through it and picks the throttle up on the way out.
+  it("comes apart into the arcs a tightening corner is made of", () => {
+    const corners = polylineToSegments(tighteningCorner()).filter((s) => s.kind === "corner");
+    assert.ok(corners.length > 2, `${corners.length} corners for a tightening one`);
+    const radii = corners.map((c) => (c.kind === "corner" ? c.radiusM : 0));
+    assert.ok(Math.max(...radii) / Math.min(...radii) > 2, `radii ${radii.map((r) => r.toFixed(0))}`);
+  });
+
+  it("leaves a genuinely constant corner in one piece", () => {
+    const circle: Point[] = Array.from({ length: 240 }, (_, i) => {
+      const a = (i / 240) * Math.PI * 2;
+      return [Math.cos(a) * 90, Math.sin(a) * 90] as Point;
+    });
+    const corners = polylineToSegments(circle).filter((s) => s.kind === "corner");
+    assert.equal(corners.length, 1, "a circle is one corner");
+  });
+
+  // Splitting a corner must not create or lose road. Checked on a closed lap,
+  // which is what the function is built for - it wraps the end back to the
+  // start, so an open arc would legitimately come out longer than it was drawn.
+  it("keeps a lap's length whatever it splits into", () => {
+    const circumference = 2 * Math.PI * 90;
+    const closed: Point[] = Array.from({ length: 240 }, (_, i) => {
+      const a = (i / 240) * Math.PI * 2;
+      return [Math.cos(a) * 90, Math.sin(a) * 90] as Point;
+    });
+    const total = polylineToSegments(closed).reduce((sum, s) => sum + s.lengthM, 0);
+    assert.ok(
+      Math.abs(total - circumference) < circumference * 0.02,
+      `${total} against ${circumference}`,
+    );
+  });
+});

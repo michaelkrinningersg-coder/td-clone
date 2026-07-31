@@ -5,6 +5,7 @@ import Link from "next/link";
 import { slugify } from "@/lib/slug";
 import { tracks, type CarData } from "@/lib/data";
 import { brandColor } from "@/lib/brand-colors";
+import { CarSilhouette } from "@/components/CarSilhouette";
 import { carClassOf, classRangeLabel, powerToWeight } from "@/lib/classes";
 import { formatTimeMs } from "@/lib/format";
 import { heatColor, lapScore, positionScore, readableOn } from "@/lib/heat";
@@ -17,7 +18,10 @@ import {
   gearTopSpeedsMps,
   powerLimitedTopSpeedMps,
   ratedSpeedRadS,
+  cogHeightMm,
+  isForcedInduction,
   rollingResistance,
+  specificOutputPsPerLitre,
   shiftTimeS,
   solveLaunchGrip,
   treadMmPerTonne,
@@ -31,6 +35,13 @@ const BRAKE_LABEL: Record<string, string> = {
   "ventilated-disc": "Scheibe, belüftet",
   disc: "Scheibe",
   drum: "Trommel",
+};
+
+const LAYOUT_LABEL: Record<string, string> = {
+  inline: "Reihe",
+  vee: "V-Motor",
+  flat: "Boxer / liegend",
+  rotary: "Wankel",
 };
 
 const GEARBOX_LABEL: Record<string, string> = {
@@ -178,6 +189,15 @@ export function CarDetail({ car }: { car: CarData }) {
           </div>
         </div>
 
+        {/* Drawn from the car's own length, height and wheelbase, so a low long
+            coupé and a tall short van look like what they are. */}
+        <CarSilhouette
+          car={car}
+          width={240}
+          color={brandColor(car.make)}
+          className="hidden shrink-0 self-center sm:block"
+        />
+
         <div className="ml-auto flex gap-2">
           <button
             type="button"
@@ -217,10 +237,17 @@ export function CarDetail({ car }: { car: CarData }) {
             <Row label="cw-Wert" value={car.dragCoefficient.toFixed(2)} />
             <Row label="Breite × Höhe" value={`${car.widthMm} × ${car.heightMm} mm`} />
             <Row label="Radstand" value={`${car.wheelbaseMm} mm`} />
+            <Row label="Länge" value={`${car.lengthMm} mm`} />
+            <Row label="Spurweite" value={`${Math.round(car.trackWidthMm)} mm`} />
+            <Row label="Hubraum" value={`${(car.displacementCm3 / 1000).toFixed(1)} l`} />
             <Row label="Bremse vorn" value={BRAKE_LABEL[car.brakeFront] ?? car.brakeFront} />
             <Row label="Bremse hinten" value={BRAKE_LABEL[car.brakeRear] ?? car.brakeRear} />
             <Row label="Reifenbreite" value={`${car.tyreWidthMm} mm`} />
-            <Row label="Zylinder" value={String(car.cylinders)} />
+            <Row
+              label="Zylinder"
+              value={String(car.cylinders)}
+              hint={LAYOUT_LABEL[car.engineLayout] ?? car.engineLayout}
+            />
             <Row
               label="Getriebe"
               value={`${car.gearCount} Gänge`}
@@ -250,6 +277,16 @@ export function CarDetail({ car }: { car: CarData }) {
               label="Rollwiderstand"
               value={rollingResistance(car).toFixed(4)}
               hint="mehr Gummi rollt schlechter"
+            />
+            <Row
+              label="Aufladung"
+              value={isForcedInduction(car) ? "aufgeladen" : "Sauger"}
+              hint={`${specificOutputPsPerLitre(car).toFixed(0)} PS je Liter`}
+            />
+            <Row
+              label="Schwerpunkt"
+              value={`${Math.round(cogHeightMm(car))} mm`}
+              hint={car.engineLayout === "flat" ? "flacher Motor sitzt tiefer" : "Anteil der Dachhöhe"}
             />
             <Row
               label="Schaltzeit"

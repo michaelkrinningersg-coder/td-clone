@@ -57,6 +57,16 @@ export interface ImportedCar {
   /** How many cylinders, from "L4" or "V8". More of them fire per revolution,
    * which is what lets a big engine hold a flat torque curve. */
   cylinders: number;
+  /** And how they are arranged - a flat engine sits lower in the car. */
+  engineLayout: EngineLayout;
+  /** Swept volume in cm3. With the power it says whether an engine is breathing
+   * on its own or being fed. */
+  displacementCm3: number;
+  /** Bumper to bumper, for drawing the car to scale. */
+  lengthMm: number;
+  /** How far apart the wheels are, averaged front and rear - what resists a car
+   * leaning over onto its outside tyres in a corner. */
+  trackWidthMm: number;
   gearCount: number;
   manualGearbox: boolean;
   gearboxKind: GearboxKind;
@@ -72,6 +82,9 @@ export const SPEC_FIELDS = {
   tyres: ["Tires Specs", "Tire Size:"],
   gearbox: ["Transmission Specs", "Gearbox:"],
   cylinders: ["Engine Specs", "Cylinders:"],
+  displacement: ["Engine Specs", "Displacement:"],
+  length: ["Dimensions", "Length:"],
+  track: ["Dimensions", "Front/Rear Track:"],
   power: ["Engine Specs", "Power:"],
   torque: ["Engine Specs", "Torque:"],
   fuel: ["Engine Specs", "Fuel:"],
@@ -172,6 +185,48 @@ export function parseTyreWidthMm(raw: string | undefined): number | null {
   if (!m) return null;
   const width = Number.parseInt(m[1], 10);
   return width >= 100 && width <= 400 ? width : null;
+}
+
+/** "62.6/61.8 In (1,590/1,570 Mm)" - front and rear track, and the metric pair
+ * carries thousands separators the other dimensions do not. Averaged: how far
+ * apart the wheels are is what resists a car rolling over in a corner, and the
+ * two ends differ by a couple of centimetres at most. */
+export function parseTrackMm(raw: string | undefined): number | null {
+  const m = (raw ?? "").match(/\(\s*([\d,.]+)\s*\/\s*([\d,.]+)\s*mm\s*\)/i);
+  if (!m) return null;
+  const num = (text: string) => Number.parseFloat(text.replace(/,/g, ""));
+  const front = num(m[1]);
+  const rear = num(m[2]);
+  if (!Number.isFinite(front) || !Number.isFinite(rear)) return null;
+  return (front + rear) / 2;
+}
+
+/** "3506 Cm3" */
+export function parseDisplacementCm3(raw: string | undefined): number | null {
+  const m = (raw ?? "").match(/([\d,.]+)\s*cm3/i);
+  if (!m) return null;
+  const n = Number.parseFloat(m[1].replace(/,/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** How the cylinders are arranged, from the letter in front of the count.
+ *
+ * The source writes "L4", "V8", "H6", "B4", "W12", "2-Rotor Rotary". Only one
+ * distinction earns its keep in the model: a flat engine lies on its side and
+ * sits markedly lower in the car than an upright inline or a vee, which is the
+ * one thing that says anything about where the centre of gravity is - and that
+ * was the single invented constant in the weight-transfer model. */
+export type EngineLayout = "inline" | "vee" | "flat" | "rotary";
+
+export function parseEngineLayout(raw: string | undefined): EngineLayout | null {
+  const text = (raw ?? "").trim();
+  if (/rotary|rotor/i.test(text)) return "rotary";
+  const letter = text.match(/^([A-Za-z]+)/)?.[1]?.toUpperCase();
+  if (!letter) return /^\d/.test(text) ? "inline" : null; // "4 In-Line"
+  if (letter === "H" || letter === "B") return "flat";
+  if (letter === "V" || letter === "W" || letter === "VR") return "vee";
+  if (letter === "L" || letter === "R" || letter === "INLINE") return "inline";
+  return null;
 }
 
 /** "L4", "V8", "H6", "4 In-Line", "2-Rotor Rotary" - a layout letter and a
@@ -357,6 +412,10 @@ export function convertEngine(
   const tyreWidthMm = parseTyreWidthMm(spec(engine, SPEC_FIELDS.tyres));
   const gearbox = parseGearbox(spec(engine, SPEC_FIELDS.gearbox));
   const cylinders = parseCylinderCount(spec(engine, SPEC_FIELDS.cylinders));
+  const engineLayout = parseEngineLayout(spec(engine, SPEC_FIELDS.cylinders));
+  const displacementCm3 = parseDisplacementCm3(spec(engine, SPEC_FIELDS.displacement));
+  const lengthMm = parseMillimetres(spec(engine, SPEC_FIELDS.length));
+  const trackWidthMm = parseTrackMm(spec(engine, SPEC_FIELDS.track));
   // Fuel is free text, so require actual letters rather than a "-" placeholder.
   const rawFuel = spec(engine, SPEC_FIELDS.fuel)?.trim();
   const fuelType = rawFuel && /[a-z]/i.test(rawFuel) ? rawFuel : undefined;
@@ -377,6 +436,10 @@ export function convertEngine(
     !brakeRear ||
     tyreWidthMm === null ||
     cylinders === null ||
+    !engineLayout ||
+    displacementCm3 === null ||
+    lengthMm === null ||
+    trackWidthMm === null ||
     !gearbox
   ) {
     return null;
@@ -402,6 +465,10 @@ export function convertEngine(
     brakeRear,
     tyreWidthMm,
     cylinders,
+    engineLayout,
+    displacementCm3,
+    lengthMm,
+    trackWidthMm,
     gearCount: gearbox.gearCount,
     manualGearbox: gearbox.manual,
     gearboxKind: gearbox.kind,
@@ -556,6 +623,16 @@ export function isPlausible(car: ImportedCar): boolean {
     car.gearCount <= 10 &&
     car.cylinders >= 1 &&
     car.cylinders <= 16 &&
+    // A Smart is 1,27 m across the wheels, a Hummer 1,8; a moped engine is
+    // 100 cm3 and a Viper 8.400; a Smart is 2,7 m long and a limousine 6,5.
+    car.trackWidthMm >= 1000 &&
+    car.trackWidthMm <= 2200 &&
+    car.displacementCm3 >= 100 &&
+    car.displacementCm3 <= 10000 &&
+    car.lengthMm >= 2000 &&
+    car.lengthMm <= 7000 &&
+    // The wheels cannot be further apart than the car is wide, plus mirrors.
+    car.trackWidthMm < car.widthMm &&
     car.dragCoefficient >= 0.15 &&
     car.dragCoefficient <= 0.8 &&
     car.year >= 1900 &&

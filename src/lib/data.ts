@@ -3,7 +3,7 @@ import { tracks as trackDefs } from "@/data/tracks";
 import { trackLengthM, type Segment, type SpeedTest } from "@/lib/track-types";
 import { carSlug, slugify, trackSlug } from "@/lib/slug";
 import type { Drivetrain } from "@/lib/physics";
-import type { BrakeKind, GearboxKind } from "@/lib/car-import";
+import type { BrakeKind, EngineLayout, GearboxKind } from "@/lib/car-import";
 
 /** Cars and tracks are immutable reference data, so both the SQLite path and the
  * static Pages build read them from these same seed files - there is no second
@@ -34,6 +34,14 @@ export interface CarData {
   tyreWidthMm: number;
   /** How many cylinders - see `CarPhysicsInput`. */
   cylinders: number;
+  /** And how they are arranged - see `cogHeightMm`. */
+  engineLayout: EngineLayout;
+  /** Swept volume in cm3 - see `isForcedInduction`. */
+  displacementCm3: number;
+  /** Bumper to bumper, for drawing the car to scale. */
+  lengthMm: number;
+  /** How far apart the wheels are - see `lateralTransferFactor`. */
+  trackWidthMm: number;
   gearCount: number;
   manualGearbox: boolean;
   /** What kind of gearbox, which is what decides how long a shift takes. */
